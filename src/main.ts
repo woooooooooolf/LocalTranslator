@@ -129,15 +129,11 @@ function message(text: string, error = false) {
 }
 function update() {
   $("count").textContent = `${input.value.length.toLocaleString()} / 20,000`;
-  for (const id of [
-    "translate",
-    "translate-file",
-    "swap",
-    "pick-file",
-    "clear",
-  ])
+  for (const id of ["translate", "translate-file", "swap", "pick-file"])
     $<HTMLButtonElement>(id).disabled = busy || !ready;
   $<HTMLButtonElement>("translate").disabled ||= !input.value.trim();
+  $<HTMLButtonElement>("clear").disabled =
+    busy || (!input.value && !output.value);
   $<HTMLButtonElement>("translate-file").disabled ||= !documentPath;
   $<HTMLButtonElement>("swap").disabled ||= !info?.languages
     .find((language) => language.code === target.value)
@@ -296,8 +292,7 @@ $("swap").onclick = () => {
 };
 $("translate").onclick = translateText;
 $("clear").onclick = () => {
-  input.value = "";
-  output.value = "";
+  input.value = output.value = translatedSource = translatedDirection = "";
   $("result-time").textContent = "";
   message("");
   update();
@@ -379,6 +374,25 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     void translateText();
   }
+});
+document.addEventListener("contextmenu", (event) => {
+  if (
+    !(event.target instanceof Element) ||
+    !event.target.closest("textarea, input, [contenteditable='true']")
+  ) {
+    event.preventDefault();
+  }
+});
+window.addEventListener("pagehide", () => {
+  input.value =
+    output.value =
+    documentPath =
+    translatedSource =
+    translatedDirection =
+      "";
+  $("file-title").textContent = "选择文档";
+  $("file-description").textContent = "译文另存为新文件";
+  message("");
 });
 icons();
 void applyTheme(theme);

@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod privacy;
+
 use serde_json::{json, Value};
 use std::{
-    fs::{self, OpenOptions},
+    fs,
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
@@ -18,6 +20,7 @@ struct WorkerIo {
 }
 struct Engine {
     root: PathBuf,
+    session: PathBuf,
     child: Mutex<Option<Child>>,
     io: Mutex<Option<WorkerIo>>,
 }
@@ -35,14 +38,6 @@ impl Engine {
         if !python.is_file() || !self.root.join("backend/worker.py").is_file() {
             return Err("运行时缺失。请保留 EXE 旁的 runtime 和 backend 文件夹；开发环境请先执行 npm run prepare:runtime。".into());
         }
-        let data = self.root.join("data");
-        fs::create_dir_all(&data).map_err(|e| format!("程序目录不可写：{e}"))?;
-        let log = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(data.join("engine.log"))
-            .map_err(|e| e.to_string())?;
         let mut command = Command::new(python);
         command
             .args(["-u", "-B", "-X", "utf8"])
@@ -52,9 +47,10 @@ impl Engine {
             .env_remove("PYTHONPATH")
             .env("PYTHONNOUSERSITE", "1")
             .env("JINGYI_PARENT_PID", std::process::id().to_string())
+            .env("JINGYI_SESSION_DIR", &self.session)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(log);
+            .stderr(Stdio::null());
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -95,9 +91,7 @@ impl Engine {
             let line = io
                 .output
                 .recv_timeout(Duration::from_secs(600))
-                .map_err(|_| {
-                    "引擎未响应或已退出。请重试；详细信息见 data/engine.log。".to_string()
-                })?;
+                .map_err(|_| "引擎未响应或已退出，请重试。".to_string())?;
             serde_json::from_str::<Value>(&line).map_err(|e| format!("引擎响应无效：{e}"))
         })();
         match result {
@@ -233,23 +227,29 @@ fn set_appearance(window: tauri::WebviewWindow, theme: String) -> Result<(), Str
 }
 
 fn main() {
+    #[cfg(debug_assertions)]
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    #[cfg(not(debug_assertions))]
+    let root = std::env::current_exe()
+        .expect("无法定位程序")
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let session = privacy::Session::new(&root.join("data/sessions")).expect("无法创建临时会话");
+    let session_path = session.path();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
-            #[cfg(debug_assertions)]
-            let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .unwrap()
-                .to_path_buf();
-            #[cfg(not(debug_assertions))]
-            let root = std::env::current_exe()?.parent().unwrap().to_path_buf();
-            fs::create_dir_all(root.join("data/webview"))?;
+        .setup(move |app| {
             app.manage(Engine {
                 root: root.clone(),
+                session: session_path.clone(),
                 child: Mutex::new(None),
                 io: Mutex::new(None),
             });
-            tauri::WebviewWindowBuilder::new(
+            let window = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
@@ -257,9 +257,13 @@ fn main() {
             .title("静译 · 离线翻译")
             .inner_size(1180.0, 800.0)
             .min_inner_size(900.0, 650.0)
-            .data_directory(root.join("data/webview"))
-            .additional_browser_args("--disable-background-networking --disable-component-update")
+            .data_directory(session_path.join("webview"))
+            .incognito(true)
+            .general_autofill_enabled(false)
+            .additional_browser_args("--disable-background-networking --disable-component-update --disable-breakpad --disable-crash-reporter")
             .build()?;
+            #[cfg(windows)]
+            privacy::configure(&window)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -273,9 +277,11 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("无法启动静译");
-    app.run(|app, event| {
+    let exit_code = app.run_return(|app, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             app.state::<Engine>().stop();
         }
     });
+    drop(session);
+    std::process::exit(exit_code);
 }

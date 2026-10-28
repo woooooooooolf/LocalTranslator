@@ -4,7 +4,6 @@ import os
 from pathlib import Path
 import sys
 import time
-import traceback
 import tempfile
 import shutil
 import threading
@@ -23,12 +22,16 @@ def watch_parent():
     if parent:
         kernel.WaitForSingleObject(parent, 0xFFFFFFFF)
         kernel.CloseHandle(parent)
+        standalone = globals().get('SESSION')
+        if standalone is not None:
+            standalone.cleanup()
         os._exit(0)
 
 threading.Thread(target=watch_parent, daemon=True).start()
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
+SESSION = tempfile.TemporaryDirectory(prefix='jingyi-worker-') if not os.environ.get('JINGYI_SESSION_DIR') else None
+DATA = Path(os.environ['JINGYI_SESSION_DIR']) if os.environ.get('JINGYI_SESSION_DIR') else Path(SESSION.name)
 for name, relative in {
     "USERPROFILE": "home", "APPDATA": "appdata", "LOCALAPPDATA": "appdata/local",
     "XDG_CONFIG_HOME": "config", "XDG_CACHE_HOME": "cache", "TEMP": "temp", "TMP": "temp",
@@ -136,7 +139,6 @@ for line in sys.stdin:
     try:
         response = {"ok": True, "data": handle(json.loads(line))}
     except Exception as error:
-        traceback.print_exc(file=sys.stderr)
         response = {"ok": False, "error": str(error)}
     response["elapsed"] = round(time.monotonic() - started, 2)
     protocol.write(json.dumps(response, ensure_ascii=False) + "\n")
