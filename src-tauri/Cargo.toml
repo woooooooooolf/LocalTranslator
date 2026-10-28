@@ -1,6 +1,6 @@
 [package]
 name = "local-translate"
-version = "0.1.0"
+version = "0.2.0"
 description = "静译 - CPU 离线翻译"
 edition = "2021"
 

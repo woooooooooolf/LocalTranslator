@@ -220,6 +220,18 @@ fn runtime_location(engine: State<'_, Engine>) -> String {
     engine.root.to_string_lossy().into_owned()
 }
 
+#[tauri::command]
+fn set_appearance(window: tauri::WebviewWindow, theme: String) -> Result<(), String> {
+    let theme = match theme.as_str() {
+        "dark" => tauri::Theme::Dark,
+        "light" => tauri::Theme::Light,
+        _ => return Err("不支持的主题".into()),
+    };
+    window
+        .set_theme(Some(theme))
+        .map_err(|_| "无法设置窗口主题".into())
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -256,7 +268,8 @@ fn main() {
             pick_document,
             translate_document,
             save_text,
-            runtime_location
+            runtime_location,
+            set_appearance
         ])
         .build(tauri::generate_context!())
         .expect("无法启动静译");
