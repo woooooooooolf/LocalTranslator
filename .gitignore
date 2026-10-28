@@ -5,6 +5,8 @@ runtime/
 data/
 .cache/
 src-tauri/target/
+**/target/
+models/
 src-tauri/gen/
 __pycache__/
 *.pyc
