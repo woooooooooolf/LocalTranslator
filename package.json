@@ -1,0 +1,24 @@
+{
+  "name": "local-translate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "build": "tsc && vite build",
+    "tauri": "tauri",
+    "desktop": "tauri dev",
+    "prepare:runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-runtime.ps1",
+    "portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "lucide": "^0.468.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.5"
+  }
+}

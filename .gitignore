@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+runtime/
+data/
+.cache/
+src-tauri/target/
+src-tauri/gen/
+__pycache__/
+*.pyc
+*.log
