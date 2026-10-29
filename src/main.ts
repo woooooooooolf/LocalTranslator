@@ -434,9 +434,25 @@ $("confirm-delete").onclick = () => {
   if (pendingDelete) void manageModel(pendingDelete, true);
   pendingDelete = null;
 };
+function updateDirection() {
+  ready = !!info?.packages.some(
+    (p) => p.from === source.value && p.to === target.value,
+  );
+  message(
+    ready
+      ? ""
+      : tr("请先下载“{direction}”模型。", {
+          direction: `${name(source.value)} → ${name(target.value)}`,
+        }),
+  );
+  update();
+}
 input.addEventListener("input", update);
-source.addEventListener("change", () => fillTargets());
-target.addEventListener("change", update);
+source.addEventListener("change", () => {
+  fillTargets();
+  updateDirection();
+});
+target.addEventListener("change", updateDirection);
 $("swap").onclick = () => {
   const previous = source.value;
   source.value = target.value;
@@ -445,7 +461,7 @@ $("swap").onclick = () => {
     input.value = output.value;
     output.value = "";
   }
-  update();
+  updateDirection();
 };
 $("translate").onclick = translateText;
 $("clear").onclick = () => {

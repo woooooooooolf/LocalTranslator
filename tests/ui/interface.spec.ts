@@ -181,6 +181,39 @@ test("missing-model state retains requested direction and download errors use En
   await expect(page.locator("#download-progress")).toBeHidden();
 });
 
+test("an unavailable interface direction can be swapped back to an installed model", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => {
+    const state = window as any;
+    const invoke = state.__TAURI_INTERNALS__.invoke;
+    state.__TAURI_INTERNALS__.invoke = async (command: string, args: any) => {
+      const result = await invoke(command, args);
+      if (command === "engine_info") {
+        result.data.packages = result.data.packages.filter(
+          (p: any) => p.from === "en",
+        );
+        result.data.languages = [
+          { code: "en", name: "English", targets: ["zh"] },
+          { code: "zh", name: "Chinese", targets: [] },
+        ];
+      }
+      return result;
+    };
+  });
+  await page.locator("#about").click();
+  await page.locator("#retry").click();
+  await expect(page.locator("#message")).toContainText("请先下载");
+  await page.locator("#input").fill("Hello");
+  await expect(page.locator("#translate")).toBeDisabled();
+  await page.locator("#swap").click();
+  await expect(page.locator("#source")).toHaveValue("en");
+  await expect(page.locator("#target")).toHaveValue("zh");
+  await expect(page.locator("#message")).toBeHidden();
+  await expect(page.locator("#translate")).toBeEnabled();
+});
+
 test("editors fill the window and context menus remain limited to text", async ({
   page,
 }) => {
