@@ -14,6 +14,7 @@ import {
   LoaderCircle,
   Sun,
   Moon,
+  Download,
 } from "lucide";
 import "./style.css";
 
@@ -21,9 +22,29 @@ type Language = { code: string; name: string; targets: string[] };
 type Package = { from: string; to: string; version: string };
 type Info = { languages: Language[]; packages: Package[] };
 type Reply<T> = { data: T; elapsed: number };
+type Model = {
+  id: string;
+  source: string;
+  target: string;
+  version: string;
+  bytes: number;
+  installed: boolean;
+  present: boolean;
+};
+type Progress = {
+  active: boolean;
+  id: string;
+  phase: string;
+  received: number;
+  total: number;
+  cancellable: boolean;
+};
 const desktop = "__TAURI_INTERNALS__" in window;
 let info: Info | null = null;
 let busy = false;
+let modelBusy = false;
+let models: Model[] = [];
+let pendingDelete: Model | null = null;
 let ready = false;
 let view = "text";
 let translatedSource = "";
@@ -49,7 +70,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       <button class="nav-item" data-view="models"><i data-lucide="hard-drive"></i>本地模型</button>
     </nav>
     <div class="sidebar-bottom"><button class="nav-item" id="theme-toggle" aria-label="切换到深色主题"><i data-lucide="moon"></i><span id="theme-label">深色主题</span></button>
-    <button class="about-button" id="about"><i data-lucide="circle-help"></i>关于<span>v0.3.1</span></button></div>
+    <button class="about-button" id="about"><i data-lucide="circle-help"></i>关于<span>v0.4.0</span></button></div>
   </aside>
   <main>
     <header class="topbar"><h1 id="heading">文字翻译</h1><div class="engine-status" id="engine-status" role="status"><span class="status-dot loading"></span><span id="engine-label">加载中</span></div></header>
@@ -60,12 +81,13 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <div class="editor-pane output-pane"><div class="pane-header"><span>译文</span><span id="result-time"></span></div><div class="output-container"><div class="empty-result" id="empty-result"><i data-lucide="languages"></i><span>译文</span></div><textarea id="output" readonly autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="翻译结果" hidden></textarea></div><div class="pane-footer output-tools"><span id="result-label"></span><div><button class="icon-button" id="copy" title="复制译文" aria-label="复制译文" disabled><i data-lucide="copy"></i></button></div></div></div></div>
         <div class="action-row"><span class="keyboard-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> 快速翻译</span><button class="primary" id="translate" disabled><span>翻译文字</span><i data-lucide="arrow-right"></i></button></div>
       </section>
-      <section id="models-view" class="view" hidden><div class="models-header"><h2>已安装</h2><span class="model-count" id="model-count">加载中</span></div><div id="model-list" class="model-list"></div><div class="model-note"><i data-lucide="folder-open"></i><div><strong>模型目录</strong><p id="model-path">models/packages</p><span>手动添加 Argos 模型后，重新检查引擎。</span></div></div></section>
+      <section id="models-view" class="view" hidden><div class="models-header"><h2>中英模型</h2><span class="model-count" id="model-count">加载中</span><button class="secondary" id="refresh-models">刷新</button></div><div id="model-list" class="model-list"></div><div class="download-progress" id="download-progress" hidden role="status"><div><span id="download-label">准备下载</span><button class="secondary" id="cancel-download">取消</button></div><progress id="download-bar" max="100" value="0" aria-label="模型下载进度"></progress><span id="download-size"></span></div><div class="model-note"><i data-lucide="folder-open"></i><div><strong>模型目录</strong><p id="model-path">models</p><span>仅点击下载时联网。来源：Argos / MiniSBD 官方源；下载后可断网使用。</span></div></div></section>
       <div id="message" role="status" aria-live="polite" hidden></div>
     </div>
   </main>
-  <dialog id="about-dialog"><button class="icon-button close-dialog" id="close-about" aria-label="关闭"><i data-lucide="x"></i></button><span class="brand-icon"><i data-lucide="languages"></i></span><h2>静译 <small>0.3.1</small></h2><div class="about-details">Tauri · CTranslate2 · MiniSBD<br>CPU 本地翻译</div><div class="about-actions"><button class="secondary" id="notices">第三方说明</button><button class="secondary" id="retry">重新检查引擎</button></div></dialog>
+  <dialog id="about-dialog"><button class="icon-button close-dialog" id="close-about" aria-label="关闭"><i data-lucide="x"></i></button><span class="brand-icon"><i data-lucide="languages"></i></span><h2>静译 <small>0.4.0</small></h2><div class="about-details">Tauri · CTranslate2 · MiniSBD<br>CPU 本地翻译</div><div class="about-actions"><button class="secondary" id="notices">第三方说明</button><button class="secondary" id="retry">重新检查引擎</button></div></dialog>
   <dialog id="notices-dialog" class="notices-dialog"><button class="icon-button close-dialog" id="close-notices" aria-label="关闭第三方说明"><i data-lucide="x"></i></button><h2>第三方说明</h2><textarea id="notices-text" readonly spellcheck="false" autocomplete="off" aria-label="第三方说明内容"></textarea></dialog>
+  <dialog id="delete-dialog"><h2 class="compact-heading">删除模型</h2><p id="delete-description"></p><div class="about-actions"><button class="secondary" id="cancel-delete">取消</button><button class="secondary danger" id="confirm-delete">删除</button></div></dialog>
 `;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -112,6 +134,7 @@ function icons() {
       LoaderCircle,
       Sun,
       Moon,
+      Download,
     },
   });
 }
@@ -124,14 +147,14 @@ function message(text: string, error = false) {
 function update() {
   $("count").textContent = `${input.value.length.toLocaleString()} / 20,000`;
   for (const id of ["translate", "swap"])
-    $<HTMLButtonElement>(id).disabled = busy || !ready;
+    $<HTMLButtonElement>(id).disabled = busy || modelBusy || !ready;
   $<HTMLButtonElement>("translate").disabled ||= !input.value.trim();
   $<HTMLButtonElement>("clear").disabled =
     busy || (!input.value && !output.value);
   $<HTMLButtonElement>("swap").disabled ||= !info?.languages
     .find((language) => language.code === target.value)
     ?.targets.includes(source.value);
-  source.disabled = target.disabled = busy || !ready;
+  source.disabled = target.disabled = busy || modelBusy || !ready;
   $<HTMLButtonElement>("copy").disabled = !output.value || busy;
   $("empty-result").hidden = !!output.value;
   output.hidden = !output.value;
@@ -149,6 +172,11 @@ function update() {
     ? '<i data-lucide="loader-circle" class="spin"></i><span>正在翻译</span>'
     : '<span>翻译文字</span><i data-lucide="arrow-right"></i>';
   icons();
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-model-action], #refresh-models")
+    .forEach((button) => {
+      button.disabled = busy || modelBusy || !desktop;
+    });
 }
 function fillSelect(
   select: HTMLSelectElement,
@@ -202,36 +230,14 @@ async function load() {
     );
     fillTargets(target.value);
     $("engine-label").textContent = "离线引擎已就绪";
-    $("model-count").textContent = `${info.packages.length} 个语言模型`;
-    $("model-list").replaceChildren(
-      ...info.packages.map((p) => {
-        const card = document.createElement("div");
-        card.className = "model-card";
-        const badge = document.createElement("span");
-        badge.className = "model-badge";
-        badge.textContent = p.from.toUpperCase();
-        const title = document.createElement("h3");
-        title.textContent = `${name(p.from)} → ${name(p.to)}`;
-        const version = document.createElement("p");
-        version.textContent = `Argos 模型 v${p.version} · CPU`;
-        const details = document.createElement("div");
-        details.append(title, version);
-        const status = document.createElement("span");
-        status.className = "installed";
-        status.textContent = "已安装";
-        card.append(badge, details, status);
-        return card;
-      }),
-    );
+    await loadModels();
     const root = await invoke<string>("runtime_location");
-    $("model-path").textContent = `${root}\\models\\packages`;
+    $("model-path").textContent = `${root}\\models`;
     if (!info.languages.length || !info.packages.length) {
       ready = false;
       $("engine-label").textContent = "未安装模型";
-      message(
-        "未找到本地语言包，请放入 models/packages 后重新检查引擎。",
-        true,
-      );
+      switchView("models");
+      message("请在“本地模型”中下载需要的翻译方向。");
       return;
     }
     message("");
@@ -247,7 +253,7 @@ async function load() {
   }
 }
 async function translateText() {
-  if (busy || !ready || !input.value.trim()) return;
+  if (busy || modelBusy || !ready || !input.value.trim()) return;
   busy = true;
   input.readOnly = true;
   message("");
@@ -272,6 +278,129 @@ async function translateText() {
     update();
   }
 }
+
+const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+async function loadModels() {
+  models = await invoke<Model[]>("model_catalog");
+  $("model-count").textContent =
+    `${models.filter((m) => m.installed).length} / ${models.length} 已安装`;
+  $("model-list").replaceChildren(
+    ...models.map((model) => {
+      const card = document.createElement("div");
+      card.className = "model-card";
+      const badge = document.createElement("span");
+      badge.className = "model-badge";
+      badge.textContent = model.source.toUpperCase();
+      const title = document.createElement("h3");
+      title.textContent = `${name(model.source)} → ${name(model.target)}`;
+      const description = document.createElement("p");
+      description.textContent = `v${model.version} · 下载 ${megabytes(model.bytes)}`;
+      const details = document.createElement("div");
+      details.className = "model-details";
+      details.append(title, description);
+      const status = document.createElement("span");
+      status.className = "installed";
+      status.textContent = model.installed
+        ? "已安装"
+        : model.present
+          ? "文件不完整"
+          : "未安装";
+      const action = document.createElement("button");
+      action.className = model.present ? "secondary danger" : "secondary";
+      action.dataset.modelAction = model.id;
+      action.setAttribute(
+        "aria-label",
+        `${model.present ? "删除" : "下载"}${title.textContent}模型`,
+      );
+      action.innerHTML = model.present
+        ? '<i data-lucide="trash-2"></i>删除'
+        : '<i data-lucide="download"></i>下载';
+      action.onclick = () => {
+        if (busy || modelBusy) return;
+        if (model.present) {
+          pendingDelete = model;
+          $("delete-description").textContent =
+            `删除“${title.textContent}”模型？此方向将暂时无法翻译，可随时重新下载。`;
+          $<HTMLDialogElement>("delete-dialog").showModal();
+          $("cancel-delete").focus();
+        } else void manageModel(model, false);
+      };
+      card.append(badge, details, status, action);
+      return card;
+    }),
+  );
+  update();
+}
+async function manageModel(model: Model, remove: boolean) {
+  if (busy || modelBusy || !desktop) return;
+  modelBusy = true;
+  $("engine-label").textContent = "模型管理中";
+  message("");
+  update();
+  $("download-progress").hidden = false;
+  $("download-label").textContent = remove ? "删除中" : "准备下载";
+  $("download-size").textContent = "";
+  $<HTMLProgressElement>("download-bar").value = 0;
+  $<HTMLButtonElement>("cancel-download").disabled = remove;
+  let polling = false;
+  const poll = async () => {
+    if (polling) return;
+    polling = true;
+    try {
+      const progress = await invoke<Progress>("model_progress");
+      if (!modelBusy || !progress.active) return;
+      $("download-label").textContent =
+        `${name(model.source)} → ${name(model.target)} · ${progress.phase}`;
+      $("download-size").textContent = remove
+        ? ""
+        : `${megabytes(progress.received)} / ${megabytes(progress.total)}`;
+      $<HTMLProgressElement>("download-bar").value = progress.total
+        ? Math.min(100, (progress.received / progress.total) * 100)
+        : 0;
+      $<HTMLButtonElement>("cancel-download").disabled = !progress.cancellable;
+    } catch {
+      /* The operation itself reports IPC errors. */
+    } finally {
+      polling = false;
+    }
+  };
+  const timer = window.setInterval(() => void poll(), 400);
+  let result = remove ? "模型已删除" : "模型已安装，可离线翻译";
+  let failed = false;
+  try {
+    await invoke(remove ? "remove_model" : "install_model", { id: model.id });
+  } catch (error) {
+    result = String(error);
+    failed = true;
+  } finally {
+    window.clearInterval(timer);
+    modelBusy = false;
+    $("download-progress").hidden = true;
+    await load();
+    message(result, failed);
+    update();
+  }
+}
+$("refresh-models").onclick = () => {
+  if (!busy && !modelBusy) void load();
+};
+$("cancel-download").onclick = async () => {
+  $<HTMLButtonElement>("cancel-download").disabled = true;
+  try {
+    await invoke("cancel_model_download");
+  } catch {
+    message("无法取消，请稍后重试。", true);
+  }
+};
+$("cancel-delete").onclick = () => {
+  pendingDelete = null;
+  $<HTMLDialogElement>("delete-dialog").close();
+};
+$("confirm-delete").onclick = () => {
+  $<HTMLDialogElement>("delete-dialog").close();
+  if (pendingDelete) void manageModel(pendingDelete, true);
+  pendingDelete = null;
+};
 input.addEventListener("input", update);
 source.addEventListener("change", () => fillTargets());
 target.addEventListener("change", update);
@@ -330,7 +459,7 @@ $("notices").onclick = async () => {
 $("close-notices").onclick = () =>
   $<HTMLDialogElement>("notices-dialog").close();
 $("retry").onclick = () => {
-  if (!busy) {
+  if (!busy && !modelBusy) {
     $<HTMLDialogElement>("about-dialog").close();
     void load();
   }

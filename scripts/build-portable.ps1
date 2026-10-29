@@ -1,4 +1,4 @@
-param([string]$OutputName = '')
+param([string]$OutputName = '', [switch]$IncludeModels)
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $project
@@ -7,7 +7,7 @@ if (!$OutputName) {
     $OutputName = 'Jingyi-Native-' + ($version -replace '[^A-Za-z0-9._-]', '-')
 }
 if ($OutputName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$' -or $OutputName -in @('.', '..')) { throw 'Invalid output folder name' }
-if (!(Test-Path models/packages)) { throw 'Run npm run prepare:models first' }
+if ($IncludeModels -and !(Test-Path models/packages)) { throw 'Run npm run prepare:models first' }
 if (!(Test-Path .cache/native/build/lib/jingyi_native.lib)) { throw 'Run npm run native:core first' }
 if (!(Test-Path .cache/onnx/lib/onnxruntime.lib)) { throw 'Run npm run native:onnx first' }
 & python scripts/generate-native-notices.py
@@ -17,12 +17,14 @@ if ($LASTEXITCODE) { throw 'Tauri 构建失败' }
 $out = Join-Path (Join-Path $project 'release') $OutputName
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 Copy-Item -LiteralPath 'src-tauri/target/release/local-translate.exe' -Destination (Join-Path $out '静译.exe')
-foreach ($part in @('models')) {
-    & robocopy (Join-Path $project $part) (Join-Path $out $part) /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP /XD __pycache__ | Out-Null
-    if ($LASTEXITCODE -ge 8) { throw "复制失败: $part" }
+if ($IncludeModels) {
+    & robocopy (Join-Path $project 'models') (Join-Path $out 'models') /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP /XD __pycache__ .manager | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw '模型复制失败' }
 }
 if ((Test-Path (Join-Path $out 'runtime')) -or (Test-Path (Join-Path $out 'backend'))) { throw 'Unexpected legacy runtime in native output directory' }
-$attachments = Get-ChildItem -LiteralPath (Join-Path $out 'models') -Recurse -File |
-    Where-Object { $_.Extension -in @('.exe','.dll','.pyd','.py') }
+$attachments = if (Test-Path (Join-Path $out 'models')) {
+    Get-ChildItem -LiteralPath (Join-Path $out 'models') -Recurse -File |
+        Where-Object { $_.Extension -in @('.exe','.dll','.pyd','.py') }
+}
 if ($attachments) { throw 'Program/runtime attachments were found under models' }
 Write-Host "便携包: $out"
