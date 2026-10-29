@@ -8,6 +8,10 @@
 
 在本机 CPU 上进行中英文文字翻译。界面与推理引擎编入一个 EXE，模型可在程序内按需下载，安装后可断网使用。
 
+- **隐私优先**：原文和译文在本机内存中处理，不上传到翻译服务，不保存草稿、历史或内容日志；安装模型后可断网翻译。
+- **不设题材限制**：应用不做内容审核、关键词屏蔽或按主题拒译。单次 20,000 字符的长度限制仍适用。
+- **效果取决于模型**：译文可能不尽如人意，出现生硬表达、误译或漏译，不保证准确、自然或完整。模型对不同题材和语境的表现也可能不同。
+
 ## 下载与运行
 
 从 [Releases](https://github.com/woooooooooolf/LocalTranslator/releases/latest) 下载 `LocalTranslator_V1.0.0_Windows_x64.exe`，放在有写入权限的文件夹后运行。无需安装 Python、Node.js、CUDA 或附带应用 DLL。
@@ -40,7 +44,7 @@ models/
 
 仅模型下载模块联网，接收固定模型 ID，不接收翻译文字或任意 URL。下载使用官方 Argos / MiniSBD 源、内置 SHA-256、受限解包及实际加载检查；失败或取消不会启用半成品。模型文件来源与固定校验值见 [模型部署说明](docs/MODEL_DEPLOYMENT.md)。
 
-当前使用 Argos 1.9 中英双向模型、CTranslate2、SentencePiece 和 MiniSBD，纯 CPU 推理。工具不承诺翻译质量；权重与原工具一致，原生 Ruy 后端与 Python/MKL 后端的译文可能存在差异。组件许可和模型署名见程序“关于”及 [第三方说明](THIRD_PARTY_NOTICES.md)。
+当前使用 Argos 1.9 中英双向模型、CTranslate2、SentencePiece 和 MiniSBD，纯 CPU 推理。翻译效果受模型能力和输入语境影响，“不设题材限制”不代表模型对所有内容都能正确理解或完整翻译。权重与原工具一致，原生 Ruy 后端与 Python/MKL 后端的译文可能存在差异。组件许可和模型署名见程序“关于”及 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
 ## 从源码构建
 

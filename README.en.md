@@ -8,6 +8,10 @@
 
 Translate Chinese and English text locally on your CPU. The interface and inference engines are compiled into one EXE. Download models in the app, then translate offline.
 
+- **Privacy first:** Input and output are processed in local memory, without sending text to a translation service or saving drafts, history or content logs. Translation works offline after model installation.
+- **No application-level content restrictions:** The app adds no content moderation, keyword blocking or topic-based refusal rules. The 20,000-character per-request limit still applies.
+- **Quality depends on the model:** Results may be disappointing, with awkward wording, mistranslations or omissions. Accuracy, fluency and completeness are not guaranteed, and performance can vary across topics and contexts.
+
 ## Download and run
 
 Download `LocalTranslator_V1.0.0_Windows_x64.exe` from [Releases](https://github.com/woooooooooolf/LocalTranslator/releases/latest). Place it in a writable folder and run it. Python, Node.js, CUDA and accompanying application DLLs are not required.
@@ -40,7 +44,7 @@ Input and output remain in memory. The app does not write drafts, browser storag
 
 Only model downloads use the network. The download module takes fixed model IDs, never translation text or arbitrary URLs. Official Argos / MiniSBD downloads are checked against embedded SHA-256 values, extracted with limits and validated by loading the models before installation. Interrupted or cancelled downloads do not become usable partial models. See [model deployment](docs/MODEL_DEPLOYMENT.md) for sources and pinned checksums.
 
-The current models are Argos 1.9 Chinese ↔ English, with CTranslate2, SentencePiece and MiniSBD on the CPU. Translation quality is not guaranteed. Weights match the original tool, but the native Ruy backend may produce different wording from Python/MKL. Component licenses and model attribution are available in **About** and [third-party notices](THIRD_PARTY_NOTICES.md).
+The current models are Argos 1.9 Chinese ↔ English, with CTranslate2, SentencePiece and MiniSBD on the CPU. Results depend on model capability and input context: the absence of application-level content filters does not mean the model can correctly understand or fully translate every text. Weights match the original tool, but the native Ruy backend may produce different wording from Python/MKL. Component licenses and model attribution are available in **About** and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Build from source
 
