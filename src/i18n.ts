@@ -179,8 +179,8 @@ export function errorText(error: unknown): string {
 
 export const preferredDirection = (value: Locale) =>
   value === "en"
-    ? { source: "en", target: "zh" }
-    : { source: "zh", target: "en" };
+    ? { source: "zh", target: "en" }
+    : { source: "en", target: "zh" };
 const languageNames: Record<string, [string, string]> = {
   zh: ["简体中文", "Chinese (Simplified)"],
   en: ["英语", "English"],

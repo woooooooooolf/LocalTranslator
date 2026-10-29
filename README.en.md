@@ -14,7 +14,7 @@ Download `LocalTranslator_V1.0.0_Windows_x64.exe` from [Releases](https://github
 
 Supported: **Windows 11 x64 / Windows 10 2004+ x64**, with [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) installed. This release supports Windows only. Linux build/linking and privacy behavior need separate porting and validation; macOS is not offered.
 
-On first launch, open **Models** and download Chinese → English or English → Chinese. Only an explicit download action contacts the official model sources. There are no background downloads or model updates. Once installed, translation works without an internet connection. Models can be deleted and downloaded again.
+On first launch, open **Models** and download English → Chinese or Chinese → English. Only an explicit download action contacts the official model sources. There are no background downloads or model updates. Once installed, translation works without an internet connection. Models can be deleted and downloaded again.
 
 ```text
 LocalTranslator_V1.0.0_Windows_x64.exe
@@ -27,8 +27,10 @@ Distribute the EXE alone, or include prepared `models/packages` and `models/mini
 
 ## Use
 
+The corrected direction defaults below are on the main branch and have not been released yet. The V1.0.0 executable retains its original defaults.
+
 - Enter or paste up to 20,000 characters. Click **Translate** or press `Ctrl+Enter`. Clipboard writes require an explicit copy action.
-- The interface starts in Chinese. Select **English** in the sidebar to use English and automatically choose English → Chinese. Switching back chooses Chinese → English. Existing input and output stay unchanged. Missing directions prompt you to download the model.
+- The interface starts in Chinese with English → Chinese translation. Select **English** in the sidebar to use English and automatically choose Chinese → English. Switching back restores English → Chinese. Existing input and output stay unchanged. Missing directions prompt you to download the model.
 - Light/dark themes and expanding text editors are included. Interface language and manual theme choices apply only to the current session and are not stored in the browser.
 - Text translation and copy only: no document import, translation history or translation file export.
 

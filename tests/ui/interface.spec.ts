@@ -79,18 +79,18 @@ test("defaults to Chinese and switches direction without rewriting translation c
 }) => {
   await setup(page);
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await expect(page.locator("#source")).toHaveValue("zh");
-  await expect(page.locator("#target")).toHaveValue("en");
-  await page.locator("#input").fill("你好，世界！");
-  await page.locator("#translate").click();
-  await expect(page.locator("#output")).toHaveValue("Hello, world!");
-  await page.locator("#locale-toggle").click();
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator("#source")).toHaveValue("en");
   await expect(page.locator("#target")).toHaveValue("zh");
+  await page.locator("#input").fill("Hello, world!");
+  await page.locator("#translate").click();
+  await expect(page.locator("#output")).toHaveValue("哈罗,世界!");
+  await page.locator("#locale-toggle").click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("#source")).toHaveValue("zh");
+  await expect(page.locator("#target")).toHaveValue("en");
   await expect(page.locator("#heading")).toHaveText("Translate");
-  await expect(page.locator("#input")).toHaveValue("你好，世界！");
-  await expect(page.locator("#output")).toHaveValue("Hello, world!");
+  await expect(page.locator("#input")).toHaveValue("Hello, world!");
+  await expect(page.locator("#output")).toHaveValue("哈罗,世界!");
   await expect(page.locator("#result-label")).toHaveText(
     "Text or language changed. Translate again.",
   );
@@ -104,8 +104,8 @@ test("defaults to Chinese and switches direction without rewriting translation c
     "Switch to light theme",
   );
   await page.locator("#locale-toggle").click();
-  await expect(page.locator("#source")).toHaveValue("zh");
-  await expect(page.locator("#target")).toHaveValue("en");
+  await expect(page.locator("#source")).toHaveValue("en");
+  await expect(page.locator("#target")).toHaveValue("zh");
   await expect(page.locator("#heading")).toHaveText("文字翻译");
   await expect(page.locator("#input")).toHaveAttribute(
     "placeholder",
@@ -129,6 +129,8 @@ test("defaults to Chinese and switches direction without rewriting translation c
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator("#input")).toHaveValue("");
+  await expect(page.locator("#source")).toHaveValue("en");
+  await expect(page.locator("#target")).toHaveValue("zh");
 });
 
 test("English model screen, confirmation and native errors are localized", async ({
@@ -166,12 +168,12 @@ test("missing-model state retains requested direction and download errors use En
 }) => {
   await setup(page, false);
   await page.locator("#locale-toggle").click();
-  await expect(page.locator("#source")).toHaveValue("en");
-  await expect(page.locator("#target")).toHaveValue("zh");
+  await expect(page.locator("#source")).toHaveValue("zh");
+  await expect(page.locator("#target")).toHaveValue("en");
   await expect(page.locator("#translate")).toBeDisabled();
   await page
     .getByRole("button", {
-      name: "Download English → Chinese (Simplified) model",
+      name: "Download Chinese (Simplified) → English model",
       exact: true,
     })
     .click();
@@ -192,11 +194,11 @@ test("an unavailable interface direction can be swapped back to an installed mod
       const result = await invoke(command, args);
       if (command === "engine_info") {
         result.data.packages = result.data.packages.filter(
-          (p: any) => p.from === "en",
+          (p: any) => p.from === "zh",
         );
         result.data.languages = [
-          { code: "en", name: "English", targets: ["zh"] },
-          { code: "zh", name: "Chinese", targets: [] },
+          { code: "zh", name: "Chinese", targets: ["en"] },
+          { code: "en", name: "English", targets: [] },
         ];
       }
       return result;
@@ -208,8 +210,8 @@ test("an unavailable interface direction can be swapped back to an installed mod
   await page.locator("#input").fill("Hello");
   await expect(page.locator("#translate")).toBeDisabled();
   await page.locator("#swap").click();
-  await expect(page.locator("#source")).toHaveValue("en");
-  await expect(page.locator("#target")).toHaveValue("zh");
+  await expect(page.locator("#source")).toHaveValue("zh");
+  await expect(page.locator("#target")).toHaveValue("en");
   await expect(page.locator("#message")).toBeHidden();
   await expect(page.locator("#translate")).toBeEnabled();
 });
@@ -260,15 +262,15 @@ test("capture bilingual interface previews with explicit synthetic samples", asy
     "Documentation capture is opt-in",
   );
   await setup(page);
-  await page.locator("#input").fill("你好，世界！");
+  await page.locator("#input").fill("Hello, world!");
   await page.locator("#translate").click();
-  await expect(page.locator("#output")).toHaveValue("Hello, world!");
+  await expect(page.locator("#output")).toHaveValue("哈罗,世界!");
   const directory = path.resolve("docs/images");
   fs.mkdirSync(directory, { recursive: true });
   await page.screenshot({ path: path.join(directory, "screenshot-zh.png") });
   await page.locator("#locale-toggle").click();
-  await page.locator("#input").fill("Hello, world!");
+  await page.locator("#input").fill("你好，世界！");
   await page.locator("#translate").click();
-  await expect(page.locator("#output")).toHaveValue("哈罗,世界!");
+  await expect(page.locator("#output")).toHaveValue("Hello, world!");
   await page.screenshot({ path: path.join(directory, "screenshot-en.png") });
 });
