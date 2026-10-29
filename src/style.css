@@ -122,6 +122,12 @@ svg {
   background: var(--accent);
   color: var(--surface);
 }
+html[lang="en"] .brand {
+  font-size: 14px;
+  letter-spacing: 0;
+  gap: 8px;
+  padding: 0;
+}
 .brand-icon svg {
   width: 25px;
   height: 25px;

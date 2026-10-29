@@ -124,6 +124,18 @@ fn set_appearance(window: tauri::WebviewWindow, theme: String) -> Result<(), Str
         .map_err(|_| "无法设置窗口主题".into())
 }
 
+#[tauri::command]
+fn set_interface_language(window: tauri::WebviewWindow, language: String) -> Result<(), String> {
+    let title = match language.as_str() {
+        "zh" => "静译 · 离线翻译",
+        "en" => "LocalTranslator · Offline translation",
+        _ => return Err("Unsupported interface language.".into()),
+    };
+    window
+        .set_title(title)
+        .map_err(|_| "Could not update the window title.".into())
+}
+
 fn main() {
     #[cfg(debug_assertions)]
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -172,7 +184,7 @@ fn main() {
             translate_text,
             runtime_location,
             third_party_notices,
-            set_appearance
+            set_appearance, set_interface_language
             ,model_catalog, model_progress, cancel_model_download, install_model, remove_model
         ])
         .build(tauri::generate_context!())

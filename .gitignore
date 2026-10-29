@@ -11,3 +11,5 @@ src-tauri/gen/
 __pycache__/
 *.pyc
 *.log
+test-results/
+playwright-report/
