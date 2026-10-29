@@ -34,9 +34,9 @@ jobs:
       - name: Check version and tag
         shell: pwsh
         run: |
+          python scripts/check-versions.py
+          if ($LASTEXITCODE) { throw 'Version consistency check failed' }
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -cne "V$version") { throw 'Tag/package version mismatch' }
-          if ((Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version -ne $version) { throw 'Tauri version mismatch' }
           "APP_VERSION=$version" >> $env:GITHUB_ENV
       - name: Install frontend and Rust tools
         shell: pwsh
@@ -96,6 +96,7 @@ jobs:
           npm run portable
           if ($LASTEXITCODE) { throw 'Release build failed' }
           $exe = "release/LocalTranslator-V$($env:APP_VERSION)/LocalTranslator_V$($env:APP_VERSION)_Windows_x64.exe"
+          if ((Get-Item $exe).VersionInfo.ProductVersion -cne $env:APP_VERSION) { throw 'EXE resource version mismatch' }
           python scripts/verify-release.py $exe
           if ($LASTEXITCODE) { throw 'Final executable check failed' }
           . ./scripts/msvc-env.ps1

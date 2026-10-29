@@ -1,53 +1,48 @@
-# 静译 · Jingyi Translate
+# 静译 · LocalTranslator
 
-0.4.0 是 Windows x64 原生 CPU 离线文字翻译工具。Tauri 界面、CTranslate2 和 ONNX Runtime 均编入 EXE；只需分发 EXE，首次运行可按需下载模型，不包含 Python、程序 DLL 或需解压运行的程序附件。
+简体中文 | [English](README.en.md)
 
-## 运行
+![静译中文界面](docs/images/screenshot-zh.png)
 
-本次更新位于 `release/Jingyi-Native-0.4.0/静译.exe`。将 EXE 放到可写目录，联网运行，在“本地模型”下载需要的方向，完成后可断网翻译。也可保留旧版 EXE 旁的 `models` 直接使用。
+*界面预览，使用合成示例文本；由与桌面版相同的前端页面生成。*
 
-下载后目录结构：
+在本机 CPU 上进行中英文文字翻译。界面与推理引擎编入一个 EXE，模型可在程序内按需下载，安装后可断网使用。
+
+## 下载与运行
+
+从 [Releases](https://github.com/woooooooooolf/LocalTranslator/releases/latest) 下载 `LocalTranslator_V1.0.0_Windows_x64.exe`，放在有写入权限的文件夹后运行。无需安装 Python、Node.js、CUDA 或附带应用 DLL。
+
+支持 **Windows 11 x64 / Windows 10 2004+ x64**，需要系统已安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。本版仅发布 Windows；Linux 的构建链接和隐私适配尚未验证，macOS 暂不提供。
+
+首次运行进入“本地模型”，按需下载“中文→英语”或“英语→中文”。仅点击下载时访问官方模型源，不在后台更新或下载；下载完成后无需联网翻译。删除模型后可重新下载。
 
 ```text
-Jingyi-Native/
-├─ 静译.exe
-└─ models/
-   ├─ packages/    # 翻译权重、SentencePiece 模型、配置与模型 README
-   └─ minisbd/     # en.onnx、zh-hans.onnx
+LocalTranslator_V1.0.0_Windows_x64.exe
+models/
+  packages/    # 翻译权重、分词器、配置和模型署名
+  minisbd/     # 分句模型
 ```
 
-应用仍需要系统 **WebView2 Runtime**。当前构建也使用 Windows 的 DXCore 系统 API，目标为 Windows 11 x64 或 Windows 10 2004+；[Microsoft 的 API 要求](https://learn.microsoft.com/en-us/windows/win32/api/dxcore/nf-dxcore-dxcorecreateadapterfactory) 为 Build 18936+。没有附带 WebView2 安装器，完全离线机器需预先准备系统组件。运行不需要 Python、Node.js、Rust、CUDA 或 VC++ 附带 DLL。
-
-程序目录需可写。运行时会创建 `data/sessions/session-*` 作为临时 WebView2 会话目录，正常退出清理；仅在父目录为空时移除 `data`。不要放入只读位置。第三方说明内置于“关于”，无需旁挂说明文件。
-
-分发只需 EXE；为离线电脑准备时可另附 `models/packages` 与 `models/minisbd`。不要把运行中的 `data` 或 `models/.manager` 临时管理目录打包。旧版的 `runtime`、`backend` 不需要放在原生版旁边。
+分发时只需 EXE；离线电脑可另行附带已准备的 `models/packages` 与 `models/minisbd`。模型管理使用的 `.manager` 和运行中的 `data` 不应随包分发。删除方向模型时，少于 1 MB 的共享分句数据会保留。
 
 ## 使用
 
-- 当前模型为 Argos 中英双向 1.9。输入最多 20,000 字符，Ctrl+Enter 翻译，支持交换语言和手动复制。文字译文的“保存为文本”功能已移除。
-- “本地模型”分别提供英→中（约 67.6 MiB）和中→英（约 71.6 MiB）的下载、进度、取消、刷新与删除；不后台联网。删除需要一次应用内确认，删除后可重新下载，无需重启。少于 1 MB 的共享 MiniSBD 数据保留，避免影响手动安装的同源语言模型。
-- 侧栏切换深浅主题，启动时跟随系统，不记录主题偏好；输入输出区域随窗口扩展。
-- 页面文本框保留右键编辑菜单，其他页面区域不显示右键菜单。
-- 文档翻译、文件选择和文件保存已按用户要求全部移除；不包含 PDF、OCR 或文档字体组件。
+- 输入或粘贴最多 20,000 字符，点击翻译或按 `Ctrl+Enter`；主动点击复制按钮才能写入剪贴板。
+- 默认中文界面，侧栏可切换 English。英文界面自动选择“英语→中文”，切回中文自动选择“中文→英语”；切换不会改写输入或译文。对应模型缺失时会提示下载。
+- 支持深浅主题，文本区域随窗口伸缩。界面语言和手动主题选择仅在本次运行中有效，不写入浏览器存储。
+- 只提供文字翻译和复制，不提供文档导入、翻译历史或译文文件保存。
 
-工具只处理输入框中的文字。需要带走译文时，可主动复制，或选中后使用 Ctrl+C。
+## 本地处理与模型
 
-模型权重未改变，但 CPU 后端从原 Python/MKL 改为 Ruy，译文可能出现措辞、虚词、标点与个别质量差异。当前测试中分词和分句与原版一致，译文不是逐字兼容。没有宣称提升模型质量。
+原文、译文在内存中处理，不写入草稿、浏览器存储、内容日志或翻译缓存。WebView2 使用独立临时 InPrivate 会话，原生关闭自动填充与密码保存，并读回验证，退出时清理；异常残留在下次启动清理。这不等于对 Windows 换页或系统转储进行安全擦除。
 
-## 隐私行为
+仅模型下载模块联网，接收固定模型 ID，不接收翻译文字或任意 URL。下载使用官方 Argos / MiniSBD 源、内置 SHA-256、受限解包及实际加载检查；失败或取消不会启用半成品。模型文件来源与固定校验值见 [模型部署说明](docs/MODEL_DEPLOYMENT.md)。
 
-- 原文和译文只用于当前操作，不写草稿、翻译历史、浏览器存储或内容日志；原生层只缓存模型，不缓存翻译文本。只有主动复制才写入剪贴板。
-- WebView2 使用独立临时目录与 InPrivate，原生关闭常规自动填充、密码保存，并读回验证；文本框关闭 autocomplete、自动纠错与拼写检查。
-- 没有文件对话框或译文文件输出命令；CLI 文件翻译请求也被拒绝。不存在清理对话框状态失败的路径，不更改其他软件的最近文件记录或系统全局偏好。
-- 不启动 HTTP 服务，不监听翻译端口，不引用 CDN，不自动下载模型。只有主动点击模型下载会通过原生 HTTP 客户端访问官方模型源，发送固定权重请求，不传入原文、译文或本地路径；页面 CSP 不开放互联网请求。CPU 原生推理路径不调用联网翻译服务；ONNX Runtime 构建关闭遥测，运行时也禁用遥测。
-- 模型完整包与所选文件均校验内置 SHA-256；临时下载、校验、受限解包和实际加载验证成功后才发布安装目录。失败或取消不启用半成品，异常退出的模型临时文件在下次模型操作时清理。`models/.manager` 只存锁、版本戳和临时权重，不存翻译内容。模型管理期间暂停翻译，多实例使用文件锁协调。
-- 退出清理属于本应用的临时会话；文件锁保护其他活动实例。异常中断或句柄暂未释放时，残留会在下次启动重试清理，不将删除称为安全擦除。
+当前使用 Argos 1.9 中英双向模型、CTranslate2、SentencePiece 和 MiniSBD，纯 CPU 推理。工具不承诺翻译质量；权重与原工具一致，原生 Ruy 后端与 Python/MKL 后端的译文可能存在差异。组件许可和模型署名见程序“关于”及 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
-这些措施约束应用自动保存行为，不表示能阻止 Windows 换页、系统转储、系统组件自身行为或用户主动导出/复制。旧 0.2.0 的 `release/Jingyi` 保留为对照，不再作为原生版交付目录。
+## 从源码构建
 
-## 构建与验证
-
-开发构建需要 Node.js、Rust MSVC、Visual Studio C++ Build Tools、Windows SDK、CMake 3.28+、Ninja 和 Python 3。Python 仅是构建/对照测试工具，不是应用运行依赖。
+需要 Windows x64、Visual Studio C++ Build Tools / Windows SDK、Rust 1.99.0、Node.js 24、Python 3、CMake 3.28+、Git；Ninja 使用 Visual Studio 附带版本。Python 仅供构建和开发验证使用。
 
 ```powershell
 npm ci
@@ -56,20 +51,18 @@ npm run native:onnx
 npm run portable
 ```
 
-`prepare:models` 从当前工程保留的旧 `runtime` 复制模型；不会改动原始工具目录。构建源码固定到上游提交，静态使用 VC++ 运行库，不下载运行时 DLL 作为旁挂文件。`native:onnx` 的首次构建耗时较长。
-
-打包默认输出 `release/Jingyi-Native-<版本>` 内的单一 EXE，避免覆盖正在使用的旧版。需要预附离线模型时，先 `npm run prepare:models`，再执行 `npm run portable -- -IncludeModels`。HTTP/TLS 使用 Windows 系统组件，不附带 OpenSSL 等程序 DLL。
+首次静态构建耗时较长，源码版本固定在构建脚本中。输出位于 `release/LocalTranslator-V1.0.0/`，默认只含命名后的 EXE。可选 `npm run portable -- -IncludeModels` 预附当前工程中的离线模型。
 
 ```powershell
-cargo test --manifest-path crates/engine/Cargo.toml --lib
-cargo test --manifest-path src-tauri/Cargo.toml --bin local-translate
-cargo test --manifest-path src-tauri/Cargo.toml --bin local-translate cached_install_translate_remove -- --ignored --nocapture
-cargo test --manifest-path src-tauri/Cargo.toml --bin local-translate official_download_install_translate_remove -- --ignored --nocapture
-runtime/py/python.exe -B -X utf8 scripts/check-native-engine.py --exe <已安装双向模型的EXE路径>
+npx playwright install chromium
+npm test
+cargo test --locked --manifest-path src-tauri/Cargo.toml --bin local-translate
+python scripts/fetch-model-catalog.py --verify
+cargo test --locked --manifest-path src-tauri/Cargo.toml --bin local-translate cached_install_translate_remove -- --ignored --nocapture
 ```
 
-最后一项使用保留的 Python 环境进行合成样本对照；实际被测程序是原生 EXE。`--stdio` 是显式的开发验证入口，通过 stdin/stdout JSONL 工作，不创建翻译记录。
+UI 回归使用隔离浏览器和模拟 IPC；模型生命周期测试实际加载权重并执行双向 CPU 翻译。两类证据不替代原生桌面人工验收。更多记录见 [验证记录](VALIDATION.md)。
 
-缓存测试需要先由维护脚本 `python scripts/fetch-model-catalog.py` 获取官方权重；真实联网测试会下载约 139 MiB 数据，使用独立测试目录，不改已有模型。维护脚本会重建内置清单，模型版本更新时应人工审查提交，应用本身不下载远程清单。
+## 自动构建与发布
 
-源码与锁文件纳入 Git，模型、旧运行时、依赖缓存和编译产物忽略。每次验证后的功能批次建立本地提交，不自动推送、打标签或发布。详见 [原生迁移记录](docs/NATIVE_MIGRATION.md)、[验证记录](VALIDATION.md)、[模型下载实现](docs/MODEL_DEPLOYMENT.md) 和 [第三方组件](THIRD_PARTY_NOTICES.md)。
+推送代码到 `main` 或提交 PR 后运行 Windows 构建、UI/隐私检查和实际模型测试。推送与项目版本一致的 `Vx.y.z` 标签后，Actions 发布 `LocalTranslator_Vx.y.z_Windows_x64.exe` 和 `SHA256SUMS.txt`。工作流默认只有读取权限，发布任务单独获得内容写入权限；仅标签构建创建 Release。详见 [发布流程](docs/RELEASE.md)。

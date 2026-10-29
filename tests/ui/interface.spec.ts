@@ -56,7 +56,7 @@ async function setup(page: Page, installed = true) {
           if (command === "translate_text")
             return {
               data: {
-                text: args.source === "zh" ? "Hello, world!" : "你好，世界！",
+                text: args.source === "zh" ? "Hello, world!" : "哈罗,世界!",
               },
               elapsed: 0.4,
             };
@@ -269,6 +269,6 @@ test("capture bilingual interface previews with explicit synthetic samples", asy
   await page.locator("#locale-toggle").click();
   await page.locator("#input").fill("Hello, world!");
   await page.locator("#translate").click();
-  await expect(page.locator("#output")).toHaveValue("你好，世界！");
+  await expect(page.locator("#output")).toHaveValue("哈罗,世界!");
   await page.screenshot({ path: path.join(directory, "screenshot-en.png") });
 });

@@ -1,5 +1,16 @@
 # 验证记录 · 2026-10-28
 
+## V1.0.0 · 双语界面与公开发布准备 · 2026-10-29
+
+- 界面默认中文，不跟随浏览器系统语言；切换 English 选择 en→zh，切回中文选择 zh→en，不改变输入和译文，也不自动重新翻译。所需模型缺失时保持所选方向并提示下载；交换回已安装方向会清除过期提示。
+- 5 项 UI 行为测试通过：默认语言/方向联动/内容保留/刷新后清空、英文模型页与删除取消、英文下载错误、单方向模型恢复、窗口填充与编辑区右键边界。浏览器测试通过模拟 IPC 检查界面，不能冒充原生推理证明。另有显式启用的截图测试，双语 README 使用带说明的合成示例前端预览，并已人工查看图片。
+- 本轮 7 项原生隐私和模型管理测试通过；V1.0.0 缓存集成测试实际安装、加载中英权重并完成双向 CPU 翻译，再删除模型并验证另一引擎的缓存失效，无关哨兵文件未变。
+- 最终本地 EXE 通过独立目录、PATH 仅含 System32 的显式 stdio 检查：无模型时可返回状态，不解压 Python/DLL，拒绝文件输出，stderr 为空。隔离副本通过 22 个分词、24 个分句、22 个真实翻译回归；11/22 与旧 Python 后端逐字相同，权重哈希不变，和 0.3.1/0.4.0 的差异范围一致。
+- 版本资源为 1.0.0 / LocalTranslator，文件名为 `LocalTranslator_V1.0.0_Windows_x64.exe`。PE 直接依赖均为 Windows 系统 DLL / UCRT API，仍依赖系统 WebView2。该本地产物 SHA-256 为 `61A07BCF6868BBC93B8218AC716335548A54E6EFE6774131FF5C493D2B33AABF`；Actions 使用另一套 MSVC 环境重新构建，Release 的校验值以附件 SHA256SUMS.txt 为准，不要求不同工具链位级相同。
+- 本地正式窗口启动并通过 WebView2 隐私原生读回，AX 可见 InPrivate、中文默认界面、English 按钮及 0 / 2 模型状态。截图/点击仍分别报 `window capture timed out` / `coordinate input geometry is unavailable`；不将此当成原生中英文切换的完整鼠标验收。浏览器行为和图片检查与原生桌面启动证据分开记录。
+- 跨平台源码评估：构建脚本、静态 `.lib` 收集、advapi32/DXCore 链接和 WebView2 隐私读回均针对 Windows。Linux/macOS 需要单独迁移与验证，V1.0.0 仅发布 Windows x64。
+- 工作流已由 actionlint 检查；使用固定提交的 Actions、默认只读权限、标签发布任务独立 contents:write 权限，发布前检查版本、UI/原生/真实权重、独立 EXE 和 DLL 依赖，输出 EXE 与 SHA256SUMS.txt。远端构建完成情况以对应 GitHub Actions / Release 记录为准。
+
 ## 0.4.0 · 按需模型管理 · 2026-10-29
 
 - 完整下载 Argos 官方 en_zh / zh_en 1.9 归档及 MiniSBD 官方 v0.0.1 两份 ONNX。归档 CRC 通过，选取的 12 个翻译文件及两份分句模型与原有权重逐字节相同；固定归档及逐文件 SHA-256 内置于 EXE，不从远程读取可变清单。
