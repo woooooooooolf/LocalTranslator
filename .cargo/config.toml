@@ -1,2 +1,6 @@
+[env]
+ORT_LIB_LOCATION = { value = ".cache/onnx/lib", relative = true }
+ORT_PREFER_DYNAMIC_LINK = "false"
+
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
