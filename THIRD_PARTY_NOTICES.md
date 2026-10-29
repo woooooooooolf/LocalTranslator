@@ -1,29 +1,26 @@
-# 第三方组件与模型
+# 静译原生版第三方组件与模型
 
-这是本地集成工程的组件说明，不代表已完成公开发行所需的完整许可证清单或源代码交付。现阶段产物用于本地评估；未配置项目整体开源许可证，未进行公开发布。
+0.3.0 使用原生 CPU 推理。Python、Torch、SpaCy、LibreTranslate、Argos Translate Files 和 PyMuPDF 不随原生便携包分发；旧 0.2.0 目录仅保留为开发对照。
 
-## 直接使用
+应用内“关于 → 第三方说明”包含生成的许可原文与 Rust 构建依赖清单。生成器为 `scripts/generate-native-notices.py`；本工程未配置远程发布或整体开源许可。
 
-- **Tauri 2**：MIT / Apache-2.0。https://github.com/tauri-apps/tauri
-- **Lucide**：ISC。https://github.com/lucide-icons/lucide 。许可证位于 npm 包 `node_modules/lucide/LICENSE`，打包脚本同时附带该许可。
-- **Python 3.11.9**：Python Software Foundation License 等。许可原文在 `runtime/py/LICENSE.txt`。
-- **Argos Translate / argos-translate-lt**：MIT。原环境同时存在 1.11.0 与 1.12.1 的 distribution metadata，二者提供同名 `argostranslate` 模块；运行使用复制环境实际安装的实现，不重新覆盖安装。原有 metadata 和许可证保留在 `runtime/py/Lib/site-packages`。https://github.com/argosopentech/argos-translate
-- **CTranslate2 4.8.3**：MIT。https://github.com/OpenNMT/CTranslate2
-- **Argos Translate Files 1.4.4**：沿用原始安装；包 metadata 未清楚标注整体许可，其 PDF 实现注明衍生自 GPLv3 的 PolyglotPDF。https://github.com/LibreTranslate/argos-translate-files
-- **PyMuPDF**：原环境自带的 PDF 处理组件，其许可信息保留于对应 `.dist-info` 目录。https://github.com/pymupdf/PyMuPDF
-- **MiniSBD、SentencePiece、Stanza、SpaCy、Torch 等**：保留原始 Python 依赖及各自许可，详情见对应 `.dist-info` 内的 `METADATA`、`LICENSE` 或 `licenses`。
+## 主要组件
 
-## 随包模型署名
+- Tauri 2：MIT / Apache-2.0。https://github.com/tauri-apps/tauri 。文件选择使用 Windows 系统 COM 对话框。
+- Lucide：ISC。https://github.com/lucide-icons/lucide
+- CTranslate2 4.8.3：MIT，官方提交 8d91aa08225004755360daa43deb62b35b1ed65d。https://github.com/OpenNMT/CTranslate2
+- Ruy、cpu_features：Apache-2.0；cpuinfo/clog：BSD 系列；spdlog：MIT。使用 CTranslate2 固定的子模块版本。
+- ONNX Runtime 1.22：MIT，官方提交 f217402897f40ebba457e2421bc0a4702771968e。https://github.com/microsoft/onnxruntime
+- Eigen：以 EIGEN_MPL2_ONLY 构建，MPL-2.0，固定提交 1d8b82b0740839c0de7f1242a3585e3390ff5f33。原始源码：https://gitlab.com/libeigen/eigen/-/tree/1d8b82b0740839c0de7f1242a3585e3390ff5f33 。包含许可原文，源码未修改。
+- ONNX Runtime 的其他组成依赖及许可见其原始 ThirdPartyNotices.txt，随内置说明一并保留。
+- sentencepiece-rs 0.2.2：Apache-2.0，SentencePiece 的纯 Rust 运行时实现。https://github.com/Rayato159/sentencepiece-rs
+- MiniSBD 的预处理、词典特征与边界解码逻辑参照原运行时迁移为 Rust；模型未改变。保留来自 Stanza 的 Apache-2.0 署名和 credits。https://github.com/LibreTranslate/MiniSBD
+- 文档处理使用 Rust 的 quick-xml、zip、kuchikiki 与 encoding_rs；完整版本及 SPDX 表达式见内置依赖清单。
 
-保留两份模型的原始 README，均为 Argos v1.9：
+## 外置模型
 
-- English → Chinese：`runtime/packages/translate-en_zh-1_9/README.md`
-- Chinese → English：`runtime/packages/translate-zh_en-1_9/README.md`
+保留模型原 README，位置为 `models/packages/translate-en_zh-1_9/README.md` 和 `models/packages/translate-zh_en-1_9/README.md`。
 
-模型 README 声明原始 OPUS 模型为 **CC BY 4.0**，作者 **Jörg Tiedemann and Santhosh Thottingal**，论文 **OPUS-MT — Building open translation services for the World**，EAMT 2020，Lisbon, Portugal。本工程未修改模型权重。https://creativecommons.org/licenses/by/4.0/
+这两份 README 声明，原始 OPUS 模型许可为 CC BY 4.0，作者为 Jörg Tiedemann 与 Santhosh Thottingal，出处为 OPUS-MT — Building open translation services for the World，EAMT 2020，Lisbon, Portugal。本工程未修改翻译权重。https://creativecommons.org/licenses/by/4.0/
 
-中英文 MiniSBD 模型由原工具的本地缓存复制，未修改权重。
-
-## 保留但未调用的原始组件
-
-首版完整复制 Python 运行时，因此还含 LibreTranslate（AGPL 系列）等不被桌面翻译路径调用的组件。现有许可证文件保持原样。日后若公开分发，应整理精简运行环境、准确的各组件版本与许可证、必要的源代码和署名，再制定发布方式；不应仅给整个便携目录标注 MIT。
+`models/minisbd/en.onnx` 与 `zh-hans.onnx` 由原工具的 MiniSBD 本地模型复制，保留其发布来源：https://github.com/LibreTranslate/MiniSBD/releases/tag/v0.0.1 。

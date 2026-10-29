@@ -53,7 +53,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       <button class="nav-item" data-view="models"><i data-lucide="hard-drive"></i>本地模型</button>
     </nav>
     <div class="sidebar-bottom"><button class="nav-item" id="theme-toggle" aria-label="切换到深色主题"><i data-lucide="moon"></i><span id="theme-label">深色主题</span></button>
-    <button class="about-button" id="about"><i data-lucide="circle-help"></i>关于<span>v0.2.0</span></button></div>
+    <button class="about-button" id="about"><i data-lucide="circle-help"></i>关于<span>v0.3.0</span></button></div>
   </aside>
   <main>
     <header class="topbar"><h1 id="heading">文字翻译</h1><div class="engine-status" id="engine-status" role="status"><span class="status-dot loading"></span><span id="engine-label">加载中</span></div></header>
@@ -64,12 +64,13 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <div class="editor-pane output-pane"><div class="pane-header"><span>译文</span><span id="result-time"></span></div><div class="output-container"><div class="empty-result" id="empty-result"><i data-lucide="languages"></i><span>译文</span></div><textarea id="output" readonly autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="翻译结果" hidden></textarea></div><div class="pane-footer output-tools"><span id="result-label"></span><div><button class="icon-button" id="copy" title="复制译文" aria-label="复制译文" disabled><i data-lucide="copy"></i></button><button class="icon-button" id="save" title="保存为文本" aria-label="保存为文本" disabled><i data-lucide="download"></i></button></div></div></div></div>
         <div class="action-row"><span class="keyboard-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> 快速翻译</span><button class="primary" id="translate" disabled><span>翻译文字</span><i data-lucide="arrow-right"></i></button></div>
       </section>
-      <section id="file-view" class="view" hidden><div class="document-card"><div class="file-symbol"><i data-lucide="file-text"></i></div><h2 id="file-title">选择文档</h2><p id="file-description">译文另存为新文件</p><button class="secondary" id="pick-file"><i data-lucide="folder-open"></i>选择文档</button><div class="format-tags"><span>TXT</span><span>DOCX</span><span>PDF</span><span>SRT</span><span>等 9 种格式</span></div><div class="file-detail">最大 50 MB · PDF 需含文字层 · 译后请检查排版</div></div><div class="action-row"><span class="file-note">原文件保持不变</span><button class="primary" id="translate-file" disabled><span>翻译文档</span><i data-lucide="arrow-right"></i></button></div></section>
-      <section id="models-view" class="view" hidden><div class="models-header"><h2>已安装</h2><span class="model-count" id="model-count">加载中</span></div><div id="model-list" class="model-list"></div><div class="model-note"><i data-lucide="folder-open"></i><div><strong>模型目录</strong><p id="model-path">runtime/packages</p><span>手动添加 Argos 模型后，重新检查引擎。</span></div></div></section>
+      <section id="file-view" class="view" hidden><div class="document-card"><div class="file-symbol"><i data-lucide="file-text"></i></div><h2 id="file-title">选择文档</h2><p id="file-description">译文另存为新文件</p><button class="secondary" id="pick-file"><i data-lucide="folder-open"></i>选择文档</button><div class="format-tags"><span>TXT</span><span>DOCX</span><span>PPTX</span><span>SRT</span><span>等 8 种格式</span></div><div class="file-detail">最大 50 MB · 译后请检查排版</div></div><div class="action-row"><span class="file-note">原文件保持不变</span><button class="primary" id="translate-file" disabled><span>翻译文档</span><i data-lucide="arrow-right"></i></button></div></section>
+      <section id="models-view" class="view" hidden><div class="models-header"><h2>已安装</h2><span class="model-count" id="model-count">加载中</span></div><div id="model-list" class="model-list"></div><div class="model-note"><i data-lucide="folder-open"></i><div><strong>模型目录</strong><p id="model-path">models/packages</p><span>手动添加 Argos 模型后，重新检查引擎。</span></div></div></section>
       <div id="message" role="status" aria-live="polite" hidden></div>
     </div>
   </main>
-  <dialog id="about-dialog"><button class="icon-button close-dialog" id="close-about" aria-label="关闭"><i data-lucide="x"></i></button><span class="brand-icon"><i data-lucide="languages"></i></span><h2>静译 <small>0.2.0</small></h2><div class="about-details">Tauri · Argos Translate · CTranslate2<br>CPU 本地翻译<br>第三方组件说明见 THIRD_PARTY_NOTICES.md。</div><button class="secondary" id="retry">重新检查引擎</button></dialog>
+  <dialog id="about-dialog"><button class="icon-button close-dialog" id="close-about" aria-label="关闭"><i data-lucide="x"></i></button><span class="brand-icon"><i data-lucide="languages"></i></span><h2>静译 <small>0.3.0</small></h2><div class="about-details">Tauri · CTranslate2 · MiniSBD<br>CPU 本地翻译</div><div class="about-actions"><button class="secondary" id="notices">第三方说明</button><button class="secondary" id="retry">重新检查引擎</button></div></dialog>
+  <dialog id="notices-dialog" class="notices-dialog"><button class="icon-button close-dialog" id="close-notices" aria-label="关闭第三方说明"><i data-lucide="x"></i></button><h2>第三方说明</h2><textarea id="notices-text" readonly spellcheck="false" autocomplete="off" aria-label="第三方说明内容"></textarea></dialog>
 `;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
@@ -207,8 +208,7 @@ async function load() {
   try {
     const reply = await invoke<Reply<Info>>("engine_info");
     info = reply.data;
-    if (!info.languages.length || !info.packages.length)
-      throw new Error("未找到本地语言包，请检查 runtime/packages。");
+
     fillSelect(
       source,
       info.languages.filter((l) => l.targets.length),
@@ -238,7 +238,16 @@ async function load() {
       }),
     );
     const root = await invoke<string>("runtime_location");
-    $("model-path").textContent = `${root}\\runtime\\packages`;
+    $("model-path").textContent = `${root}\\models\\packages`;
+    if (!info.languages.length || !info.packages.length) {
+      ready = false;
+      $("engine-label").textContent = "未安装模型";
+      message(
+        "未找到本地语言包，请放入 models/packages 后重新检查引擎。",
+        true,
+      );
+      return;
+    }
     message("");
   } catch (e) {
     $("engine-label").textContent = "引擎需要检查";
@@ -363,6 +372,19 @@ $("theme-toggle").onclick = () => {
   void applyTheme(theme === "light" ? "dark" : "light");
 };
 $("close-about").onclick = () => $<HTMLDialogElement>("about-dialog").close();
+$("notices").onclick = async () => {
+  try {
+    $<HTMLTextAreaElement>("notices-text").value = desktop
+      ? await invoke<string>("third_party_notices")
+      : "第三方说明内置于桌面版。";
+    $<HTMLDialogElement>("about-dialog").close();
+    $<HTMLDialogElement>("notices-dialog").showModal();
+  } catch {
+    message("无法显示第三方说明。", true);
+  }
+};
+$("close-notices").onclick = () =>
+  $<HTMLDialogElement>("notices-dialog").close();
 $("retry").onclick = () => {
   if (!busy) {
     $<HTMLDialogElement>("about-dialog").close();

@@ -1,0 +1,46 @@
+"""Embed build-graph and native-source notices; no runtime license files needed."""
+import json
+from pathlib import Path
+import subprocess
+
+ROOT = Path(__file__).resolve().parent.parent
+metadata = json.loads(subprocess.run([
+    'cargo','metadata','--manifest-path',str(ROOT/'src-tauri/Cargo.toml'),
+    '--format-version','1','--locked','--filter-platform','x86_64-pc-windows-msvc',
+],check=True,capture_output=True,text=True,encoding='utf-8').stdout)
+nodes={node['id']:node for node in metadata['resolve']['nodes']}
+root=metadata['resolve']['root']; active=set(); pending=[root]
+while pending:
+    key=pending.pop()
+    if key in active:continue
+    active.add(key);pending.extend(dep['pkg'] for dep in nodes[key]['deps'])
+parts=[(ROOT/'THIRD_PARTY_NOTICES.md').read_text(encoding='utf-8')]
+parts.append('\n本构建的 Rust 依赖图（含构建依赖）及可发现的许可原文：\n')
+for package in sorted(metadata['packages'],key=lambda p:(p['name'],p['version'])):
+    if package['id'] not in active or package.get('source') is None:continue
+    parts.append(f"\n=== {package['name']} {package['version']} | {package.get('license') or 'see source'} ===\n{package.get('repository') or ''}\n")
+    directory=Path(package['manifest_path']).parent
+    for file in sorted(directory.iterdir()):
+        if file.is_file() and file.name.upper().startswith(('LICENSE','LICENCE','COPYING','NOTICE')):
+            parts.append(f'\n--- {file.name} ---\n'+file.read_text(encoding='utf-8',errors='replace'))
+
+native=[
+ ('CTranslate2','.cache/native-src/ctranslate2/LICENSE'),
+ ('spdlog','.cache/native-src/ctranslate2/third_party/spdlog/LICENSE'),
+ ('cpu_features','.cache/native-src/ctranslate2/third_party/cpu_features/LICENSE'),
+ ('Ruy','.cache/native-src/ctranslate2/third_party/ruy/LICENSE'),
+ ('cpuinfo','.cache/native-src/ctranslate2/third_party/ruy/third_party/cpuinfo/LICENSE'),
+ ('ONNX Runtime','.cache/native-src/ort-source/LICENSE'),
+ ('ONNX Runtime third-party notices','.cache/native-src/ort-source/ThirdPartyNotices.txt'),
+ ('Eigen (MPL2-only build)','.cache/native-src/eigen/COPYING.MPL2'),
+ ('MiniSBD preprocessing attribution','runtime/py/Lib/site-packages/minisbd/modules/LICENSE.txt'),
+ ('MiniSBD preprocessing credits','runtime/py/Lib/site-packages/minisbd/modules/CREDITS.txt'),
+ ('Lucide','node_modules/lucide/LICENSE'),
+]
+for name,relative in native:
+    file=ROOT/relative
+    if not file.is_file():raise RuntimeError(f'Missing license source: {relative}')
+    parts.append(f'\n=== {name} ===\n'+file.read_text(encoding='utf-8',errors='replace'))
+output=ROOT/'src-tauri/third-party-notices.txt'
+output.write_text('\n'.join(parts),encoding='utf-8')
+print(f'Embedded notices generated: {output.name}, {output.stat().st_size} bytes')

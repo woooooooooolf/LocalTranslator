@@ -7,4 +7,4 @@
 - Document conversion may use temporary copies within the current session and explicit output paths; disclose cleanup and crash limitations accurately.
 - Verify actual model translation, privacy lifecycle, frontend build and relevant Rust checks after changes. Distinguish source review, automated checks, native desktop proof, and user visual acceptance.
 - Keep fixed UI copy concise, support light/dark themes, and let text editors fill the window. Preserve text editing context menus while blocking context menus elsewhere.
-- The user deferred native inference and the single-EXE-plus-models migration to the next focused iteration. See `docs/MODEL_DEPLOYMENT.md` for sources and boundaries; 0.2.0 does not implement online model downloading.
+- Native migration is now authorized and active on `codex/native-single-exe`. Preserve the 0.2.0 baseline and comparison runtime. The user explicitly removed PDF translation; do not add PDF/font/OCR dependencies. Target one EXE plus external model data, without extracting Python or application DLLs. Keep runtime model downloads separate unless explicitly implemented and verified.

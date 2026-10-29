@@ -670,6 +670,30 @@ dialog h2 small {
   line-height: 1.9;
   margin: 18px 0 22px;
 }
+.about-actions {
+  display: flex;
+  gap: 10px;
+}
+.notices-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 90vw);
+  height: 78vh;
+}
+.notices-dialog h2 {
+  font-size: 17px;
+  margin: 0 0 20px;
+}
+#notices-text {
+  flex: 1;
+  min-height: 0;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-alt);
+  font-size: 12px;
+  line-height: 1.7;
+}
 .sr-only {
   position: absolute;
   width: 1px;

@@ -1,6 +1,6 @@
 {
   "name": "local-translate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,9 @@
     "tauri": "tauri",
     "desktop": "tauri dev",
     "prepare:runtime": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-runtime.ps1",
+    "prepare:models": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare-models.ps1",
+    "native:core": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-native.ps1",
+    "native:onnx": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-onnx.ps1",
     "portable": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-portable.ps1"
   },
   "dependencies": {

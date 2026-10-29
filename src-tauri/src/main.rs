@@ -1,110 +1,30 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod file_dialog;
 mod privacy;
 
 use serde_json::{json, Value};
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, Command, Stdio},
-    sync::{mpsc, Mutex},
-    time::Duration,
+    sync::Mutex,
+    time::Instant,
 };
 use tauri::{Manager, State};
-use tauri_plugin_dialog::DialogExt;
 
-struct WorkerIo {
-    input: ChildStdin,
-    output: mpsc::Receiver<String>,
-}
 struct Engine {
     root: PathBuf,
-    session: PathBuf,
-    child: Mutex<Option<Child>>,
-    io: Mutex<Option<WorkerIo>>,
+    inner: Mutex<jingyi_engine::Engine>,
 }
 impl Engine {
-    fn stop(&self) {
-        if let Ok(mut slot) = self.child.lock() {
-            if let Some(mut child) = slot.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-        }
-    }
-    fn start(&self) -> Result<WorkerIo, String> {
-        let python = self.root.join("runtime/py/python.exe");
-        if !python.is_file() || !self.root.join("backend/worker.py").is_file() {
-            return Err("运行时缺失。请保留 EXE 旁的 runtime 和 backend 文件夹；开发环境请先执行 npm run prepare:runtime。".into());
-        }
-        let mut command = Command::new(python);
-        command
-            .args(["-u", "-B", "-X", "utf8"])
-            .arg(self.root.join("backend/worker.py"))
-            .current_dir(&self.root)
-            .env_remove("PYTHONHOME")
-            .env_remove("PYTHONPATH")
-            .env("PYTHONNOUSERSITE", "1")
-            .env("JINGYI_PARENT_PID", std::process::id().to_string())
-            .env("JINGYI_SESSION_DIR", &self.session)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000); // CREATE_NO_WINDOW
-        }
-        let mut child = command
-            .spawn()
-            .map_err(|e| format!("启动翻译引擎失败：{e}"))?;
-        let input = child.stdin.take().ok_or("无法打开翻译进程输入")?;
-        let output = child.stdout.take().ok_or("无法打开翻译进程输出")?;
-        let (sender, receiver) = mpsc::channel();
-        std::thread::spawn(move || {
-            for line in BufReader::new(output).lines() {
-                let Ok(line) = line else {
-                    break;
-                };
-                if sender.send(line).is_err() {
-                    break;
-                }
-            }
-        });
-        *self.child.lock().map_err(|e| e.to_string())? = Some(child);
-        Ok(WorkerIo {
-            input,
-            output: receiver,
-        })
-    }
     fn request(&self, payload: Value) -> Result<Value, String> {
-        let mut slot = self.io.lock().map_err(|e| e.to_string())?;
-        if slot.is_none() {
-            *slot = Some(self.start()?);
-        }
-        let io = slot.as_mut().ok_or("引擎尚未就绪")?;
-        let result = (|| {
-            writeln!(io.input, "{payload}")
-                .and_then(|_| io.input.flush())
-                .map_err(|e| e.to_string())?;
-            let line = io
-                .output
-                .recv_timeout(Duration::from_secs(600))
-                .map_err(|_| "引擎未响应或已退出，请重试。".to_string())?;
-            serde_json::from_str::<Value>(&line).map_err(|e| format!("引擎响应无效：{e}"))
-        })();
-        match result {
-            Ok(response) if response["ok"] == true => Ok(json!({
-                "data": response["data"], "elapsed": response["elapsed"]
-            })),
-            Ok(response) => Err(response["error"].as_str().unwrap_or("翻译失败").into()),
-            Err(error) => {
-                self.stop();
-                *slot = None;
-                Err(error)
-            }
-        }
+        let started = Instant::now();
+        let data = self
+            .inner
+            .lock()
+            .map_err(|_| "翻译引擎状态异常")?
+            .request(&payload)?;
+        Ok(json!({"data":data,"elapsed":started.elapsed().as_secs_f64()}))
     }
 }
 
@@ -130,22 +50,17 @@ async fn translate_text(
     )
     .await
 }
-const FORMATS: &[&str] = &[
-    "txt", "docx", "pptx", "odt", "odp", "epub", "html", "srt", "pdf",
-];
+const FORMATS: &[&str] = jingyi_engine::FORMATS;
+fn dialog_parent(app: &tauri::AppHandle) -> usize {
+    app.get_webview_window("main")
+        .and_then(|window| window.hwnd().ok())
+        .map_or(0, |handle| handle.0 as usize)
+}
 #[tauri::command]
 async fn pick_document(app: tauri::AppHandle) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        app.dialog()
-            .file()
-            .add_filter("文档", FORMATS)
-            .blocking_pick_file()
-            .map(|p| {
-                p.into_path()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .map_err(|e| e.to_string())
-            })
-            .transpose()
+        file_dialog::open(dialog_parent(&app))
+            .map(|path| path.map(|p| p.to_string_lossy().into_owned()))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -173,16 +88,9 @@ async fn translate_document(
             target,
             extension
         );
-        let Some(output) = app
-            .dialog()
-            .file()
-            .add_filter("译文", &[&extension])
-            .set_file_name(filename)
-            .blocking_save_file()
-        else {
+        let Some(output) = file_dialog::save(dialog_parent(&app), filename, extension)? else {
             return Ok(None);
         };
-        let output = output.into_path().map_err(|e| e.to_string())?;
         let result = app.state::<Engine>().request(json!({
             "op":"file", "path":input, "output":output, "source":source, "target":target
         }))?;
@@ -194,16 +102,11 @@ async fn translate_document(
 #[tauri::command]
 async fn save_text(app: tauri::AppHandle, text: String) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let Some(file) = app
-            .dialog()
-            .file()
-            .add_filter("UTF-8 文字", &["txt"])
-            .set_file_name("译文.txt")
-            .blocking_save_file()
+        let Some(file) = file_dialog::save(dialog_parent(&app), "译文.txt".into(), "txt".into())?
         else {
             return Ok(false);
         };
-        fs::write(file.into_path().map_err(|e| e.to_string())?, text).map_err(|e| e.to_string())?;
+        fs::write(file, text).map_err(|_| "保存译文失败".to_string())?;
         Ok(true)
     })
     .await
@@ -212,6 +115,11 @@ async fn save_text(app: tauri::AppHandle, text: String) -> Result<bool, String> 
 #[tauri::command]
 fn runtime_location(engine: State<'_, Engine>) -> String {
     engine.root.to_string_lossy().into_owned()
+}
+
+#[tauri::command]
+fn third_party_notices() -> &'static str {
+    include_str!("../third-party-notices.txt")
 }
 
 #[tauri::command]
@@ -238,16 +146,18 @@ fn main() {
         .parent()
         .unwrap()
         .to_path_buf();
+    if std::env::args().any(|argument| argument == "--stdio") {
+        jingyi_engine::run_stdio(root.join("models"));
+        return;
+    }
     let session = privacy::Session::new(&root.join("data/sessions")).expect("无法创建临时会话");
+    let cleanup_root = root.clone();
     let session_path = session.path();
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
             app.manage(Engine {
                 root: root.clone(),
-                session: session_path.clone(),
-                child: Mutex::new(None),
-                io: Mutex::new(None),
+                inner: Mutex::new(jingyi_engine::Engine::new(root.join("models"))),
             });
             let window = tauri::WebviewWindowBuilder::new(
                 app,
@@ -273,15 +183,16 @@ fn main() {
             translate_document,
             save_text,
             runtime_location,
+            third_party_notices,
             set_appearance
         ])
         .build(tauri::generate_context!())
         .expect("无法启动静译");
-    let exit_code = app.run_return(|app, event| {
-        if matches!(event, tauri::RunEvent::Exit) {
-            app.state::<Engine>().stop();
-        }
-    });
+    let exit_code = app.run_return(|_, _| {});
     drop(session);
+    // Remove only empty parent directories; other running instances or unrelated
+    // files make these calls fail harmlessly.
+    let _ = fs::remove_dir(cleanup_root.join("data/sessions"));
+    let _ = fs::remove_dir(cleanup_root.join("data"));
     std::process::exit(exit_code);
 }
