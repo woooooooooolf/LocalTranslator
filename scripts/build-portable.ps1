@@ -1,6 +1,12 @@
+param([string]$OutputName = '')
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $project
+if (!$OutputName) {
+    $version = (Get-Content -LiteralPath 'package.json' -Raw | ConvertFrom-Json).version
+    $OutputName = 'Jingyi-Native-' + ($version -replace '[^A-Za-z0-9._-]', '-')
+}
+if ($OutputName -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$' -or $OutputName -in @('.', '..')) { throw 'Invalid output folder name' }
 if (!(Test-Path models/packages)) { throw 'Run npm run prepare:models first' }
 if (!(Test-Path .cache/native/build/lib/jingyi_native.lib)) { throw 'Run npm run native:core first' }
 if (!(Test-Path .cache/onnx/lib/onnxruntime.lib)) { throw 'Run npm run native:onnx first' }
@@ -8,7 +14,7 @@ if (!(Test-Path .cache/onnx/lib/onnxruntime.lib)) { throw 'Run npm run native:on
 if ($LASTEXITCODE) { throw 'Notice generation failed' }
 & npm.cmd run tauri -- build --no-bundle
 if ($LASTEXITCODE) { throw 'Tauri 构建失败' }
-$out = Join-Path $project 'release/Jingyi-Native'
+$out = Join-Path (Join-Path $project 'release') $OutputName
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 Copy-Item -LiteralPath 'src-tauri/target/release/local-translate.exe' -Destination (Join-Path $out '静译.exe')
 foreach ($part in @('models')) {

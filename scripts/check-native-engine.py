@@ -4,11 +4,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
-import xml.etree.ElementTree as ET
-import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser()
@@ -18,7 +15,7 @@ native_exe = args.exe.resolve()
 models = ROOT/'models' if native_exe.name == 'check-engine.exe' else native_exe.parent/'models'
 model_fingerprints={str(path.relative_to(models)):hashlib.sha256(path.read_bytes()).hexdigest() for path in models.rglob('*') if path.is_file()}
 command = [str(native_exe), str(models)] if native_exe.name == 'check-engine.exe' else [str(native_exe), '--stdio']
-report = {'tokenization': 0, 'sentence_boundaries': 0, 'translation_exact': 0, 'translation_total': 0, 'differences': [], 'documents': []}
+report = {'tokenization': 0, 'sentence_boundaries': 0, 'translation_exact': 0, 'translation_total': 0, 'differences': [], 'file_requests_rejected': 0}
 
 class Process:
     def __init__(self, command, environment=None, quiet=False):
@@ -59,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='native-check-',dir=ROOT/'.cache') as te
                      {**os.environ,'JINGYI_SESSION_DIR':str(temp/'reference-session')})
     try:
         info=native.request({'op':'info'})
-        assert info['native'] and 'pdf' not in info['formats'] and len(info['formats'])==8
+        assert info['native'] and info['formats']==[]
         for source,target,language,samples in [
             ('en','zh','en',['Hello, world!','This translation runs locally on the CPU.',
              'Please check the USB connection.','Do not save this text automatically.',
@@ -94,48 +91,15 @@ with tempfile.TemporaryDirectory(prefix='native-check-',dir=ROOT/'.cache') as te
         native.request({'op':'text','source':'en','target':'zh','text':''},False)
         native.request({'op':'text','source':'en','target':'zh','text':'a'*20001},False)
         native.request({'op':'text','source':'en','target':'en','text':'Hello'},False)
-        files=temp/'文档 空格';files.mkdir()
-        inputs=[]
-        txt=files/'文字.txt';txt.write_text('Hello, world!\nSecond line.',encoding='utf-8');inputs.append(txt)
-        srt=files/'字幕.srt';srt.write_bytes(b'1\r\n00:00:00,000 --> 00:00:02,000\r\n<i>Hello, world!</i>\r\n\r\n');inputs.append(srt)
-        html=files/'网页.html';html.write_text('<!doctype html><html><head><title>keep title</title></head><body><p>Hello <b>world!</b></p><script>keep_code()</script></body></html>',encoding='utf-8');inputs.append(html)
-        for extension in ['docx','pptx','odt','odp','epub']:
-            path=files/f'容器.{extension}'
-            entries={
-              'docx':('word/document.xml','<w:document xmlns:w="urn:word"><w:body><w:p><w:r><w:t>Hello </w:t></w:r><w:r><w:t>world!</w:t></w:r></w:p></w:body></w:document>'),
-              'pptx':('ppt/slides/slide1.xml','<a:root xmlns:a="urn:slide"><a:p><a:r><a:t>Hello, world!</a:t></a:r></a:p></a:root>'),
-              'odt':('content.xml','<root xmlns:text="urn:text"><text:p>Hello, world!</text:p></root>'),
-              'odp':('content.xml','<root xmlns:text="urn:text"><text:p>Hello, world!</text:p></root>'),
-              'epub':('chapter.xhtml','<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>keep title</title></head><body><p>Hello, world!</p><br/></body></html>'),
-            }
-            with zipfile.ZipFile(path,'w') as archive:
-                if extension in ['odt','odp','epub']:archive.writestr('mimetype','application/epub+zip' if extension=='epub' else 'application/vnd.oasis.opendocument.text',compress_type=zipfile.ZIP_STORED)
-                name,xml=entries[extension];archive.writestr(name,xml)
-                archive.writestr('assets/keep.bin',b'UNCHANGED\x00\x01')
-            inputs.append(path)
-        for path in inputs:
-            before=sha(path);output=path.with_stem(path.stem+'-译文')
-            native.request({'op':'file','source':'en','target':'zh','path':str(path),'output':str(output)})
-            assert output.is_file() and sha(path)==before and output.read_bytes()!=path.read_bytes()
-            if path.suffix in ['.docx','.pptx','.odt','.odp','.epub']:
-                with zipfile.ZipFile(output) as archive:
-                    assert archive.read('assets/keep.bin') == b'UNCHANGED\x00\x01'
-                    for name in archive.namelist():
-                        if name.endswith(('.xml','.xhtml')):
-                            data=archive.read(name);ET.fromstring(data)
-                            if name != 'assets/keep.bin':assert re.search('[\u4e00-\u9fff]',data.decode('utf-8'))
-                    if path.suffix=='.epub':assert archive.infolist()[0].filename=='mimetype' and archive.infolist()[0].compress_type==zipfile.ZIP_STORED
-            elif path.suffix=='.srt':assert b'00:00:00,000 --> 00:00:02,000' in output.read_bytes() and b'<i>' in output.read_bytes()
-            elif path.suffix=='.html':assert 'keep_code()' in output.read_text(encoding='utf-8') and 'keep title' in output.read_text(encoding='utf-8')
-            report['documents'].append(path.suffix)
-        native.request({'op':'file','source':'en','target':'zh','path':str(txt),'output':str(txt)},False)
-        pdf=files/'removed.pdf';pdf.write_bytes(b'%PDF-test')
-        native.request({'op':'file','source':'en','target':'zh','path':str(pdf),'output':str(files/'out.pdf')},False)
-        assert not (files/'out.pdf').exists()
+        source_file=temp/'existing.txt';source_file.write_text('Private synthetic test',encoding='utf-8')
+        before=sha(source_file);output=temp/'must-not-exist.txt'
+        native.request({'op':'file','source':'en','target':'zh','path':str(source_file),'output':str(output)},False)
+        assert sha(source_file)==before and not output.exists()
+        report['file_requests_rejected']+=1
     finally:
         native.close();baseline.close()
 assert model_fingerprints == {str(path.relative_to(models)):hashlib.sha256(path.read_bytes()).hexdigest() for path in models.rglob('*') if path.is_file()}, 'Model directory was modified'
 (ROOT/'.cache/native-engine-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
 print(json.dumps({key:value for key,value in report.items() if key!='differences'},ensure_ascii=False))
 print('Differences recorded:',len(report['differences']))
-print('PASS: native tokenization, sentence boundaries, translation execution, 8 document paths and input guards.')
+print('PASS: native tokenization, sentence boundaries, translation execution, no file-export capability and input guards.')

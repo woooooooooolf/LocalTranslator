@@ -3,11 +3,9 @@ import {
   createIcons,
   Languages,
   ArrowRightLeft,
-  FileText,
   Type,
   HardDrive,
   Copy,
-  Download,
   Trash2,
   ArrowRight,
   CircleHelp,
@@ -21,14 +19,13 @@ import "./style.css";
 
 type Language = { code: string; name: string; targets: string[] };
 type Package = { from: string; to: string; version: string };
-type Info = { languages: Language[]; packages: Package[]; formats: string[] };
+type Info = { languages: Language[]; packages: Package[] };
 type Reply<T> = { data: T; elapsed: number };
 const desktop = "__TAURI_INTERNALS__" in window;
 let info: Info | null = null;
 let busy = false;
 let ready = false;
 let view = "text";
-let documentPath = "";
 let translatedSource = "";
 let translatedDirection = "";
 const names: Record<string, string> = {
@@ -49,11 +46,10 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     <a class="brand" href="#" aria-label="静译首页"><span class="brand-icon"><i data-lucide="languages"></i></span><span>静译</span></a>
     <nav aria-label="主导航">
       <button class="nav-item active" data-view="text"><i data-lucide="type"></i>文字翻译<span class="nav-dot"></span></button>
-      <button class="nav-item" data-view="file"><i data-lucide="file-text"></i>文档翻译</button>
       <button class="nav-item" data-view="models"><i data-lucide="hard-drive"></i>本地模型</button>
     </nav>
     <div class="sidebar-bottom"><button class="nav-item" id="theme-toggle" aria-label="切换到深色主题"><i data-lucide="moon"></i><span id="theme-label">深色主题</span></button>
-    <button class="about-button" id="about"><i data-lucide="circle-help"></i>关于<span>v0.3.0</span></button></div>
+    <button class="about-button" id="about"><i data-lucide="circle-help"></i>关于<span>v0.3.1</span></button></div>
   </aside>
   <main>
     <header class="topbar"><h1 id="heading">文字翻译</h1><div class="engine-status" id="engine-status" role="status"><span class="status-dot loading"></span><span id="engine-label">加载中</span></div></header>
@@ -61,15 +57,14 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       <div class="toolbar" id="language-toolbar"><div class="language-pair"><label><span class="sr-only">源语言</span><select id="source" disabled><option value="zh">简体中文</option></select></label><button class="swap" id="swap" title="交换语言" aria-label="交换语言" disabled><i data-lucide="arrow-right-left"></i></button><label><span class="sr-only">目标语言</span><select id="target" disabled><option value="en">英语</option></select></label></div></div>
       <section id="text-view" class="view">
         <div class="translation-card"><div class="editor-pane"><div class="pane-header"><span>原文</span><button class="icon-button" id="clear" title="清空文字" aria-label="清空文字"><i data-lucide="trash-2"></i></button></div><textarea id="input" maxlength="20000" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="输入或粘贴文字" aria-label="待翻译文字"></textarea><div class="pane-footer"><span id="count">0 / 20,000</span></div></div>
-        <div class="editor-pane output-pane"><div class="pane-header"><span>译文</span><span id="result-time"></span></div><div class="output-container"><div class="empty-result" id="empty-result"><i data-lucide="languages"></i><span>译文</span></div><textarea id="output" readonly autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="翻译结果" hidden></textarea></div><div class="pane-footer output-tools"><span id="result-label"></span><div><button class="icon-button" id="copy" title="复制译文" aria-label="复制译文" disabled><i data-lucide="copy"></i></button><button class="icon-button" id="save" title="保存为文本" aria-label="保存为文本" disabled><i data-lucide="download"></i></button></div></div></div></div>
+        <div class="editor-pane output-pane"><div class="pane-header"><span>译文</span><span id="result-time"></span></div><div class="output-container"><div class="empty-result" id="empty-result"><i data-lucide="languages"></i><span>译文</span></div><textarea id="output" readonly autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="翻译结果" hidden></textarea></div><div class="pane-footer output-tools"><span id="result-label"></span><div><button class="icon-button" id="copy" title="复制译文" aria-label="复制译文" disabled><i data-lucide="copy"></i></button></div></div></div></div>
         <div class="action-row"><span class="keyboard-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> 快速翻译</span><button class="primary" id="translate" disabled><span>翻译文字</span><i data-lucide="arrow-right"></i></button></div>
       </section>
-      <section id="file-view" class="view" hidden><div class="document-card"><div class="file-symbol"><i data-lucide="file-text"></i></div><h2 id="file-title">选择文档</h2><p id="file-description">译文另存为新文件</p><button class="secondary" id="pick-file"><i data-lucide="folder-open"></i>选择文档</button><div class="format-tags"><span>TXT</span><span>DOCX</span><span>PPTX</span><span>SRT</span><span>等 8 种格式</span></div><div class="file-detail">最大 50 MB · 译后请检查排版</div></div><div class="action-row"><span class="file-note">原文件保持不变</span><button class="primary" id="translate-file" disabled><span>翻译文档</span><i data-lucide="arrow-right"></i></button></div></section>
       <section id="models-view" class="view" hidden><div class="models-header"><h2>已安装</h2><span class="model-count" id="model-count">加载中</span></div><div id="model-list" class="model-list"></div><div class="model-note"><i data-lucide="folder-open"></i><div><strong>模型目录</strong><p id="model-path">models/packages</p><span>手动添加 Argos 模型后，重新检查引擎。</span></div></div></section>
       <div id="message" role="status" aria-live="polite" hidden></div>
     </div>
   </main>
-  <dialog id="about-dialog"><button class="icon-button close-dialog" id="close-about" aria-label="关闭"><i data-lucide="x"></i></button><span class="brand-icon"><i data-lucide="languages"></i></span><h2>静译 <small>0.3.0</small></h2><div class="about-details">Tauri · CTranslate2 · MiniSBD<br>CPU 本地翻译</div><div class="about-actions"><button class="secondary" id="notices">第三方说明</button><button class="secondary" id="retry">重新检查引擎</button></div></dialog>
+  <dialog id="about-dialog"><button class="icon-button close-dialog" id="close-about" aria-label="关闭"><i data-lucide="x"></i></button><span class="brand-icon"><i data-lucide="languages"></i></span><h2>静译 <small>0.3.1</small></h2><div class="about-details">Tauri · CTranslate2 · MiniSBD<br>CPU 本地翻译</div><div class="about-actions"><button class="secondary" id="notices">第三方说明</button><button class="secondary" id="retry">重新检查引擎</button></div></dialog>
   <dialog id="notices-dialog" class="notices-dialog"><button class="icon-button close-dialog" id="close-notices" aria-label="关闭第三方说明"><i data-lucide="x"></i></button><h2>第三方说明</h2><textarea id="notices-text" readonly spellcheck="false" autocomplete="off" aria-label="第三方说明内容"></textarea></dialog>
 `;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) =>
@@ -106,11 +101,9 @@ function icons() {
     icons: {
       Languages,
       ArrowRightLeft,
-      FileText,
       Type,
       HardDrive,
       Copy,
-      Download,
       Trash2,
       ArrowRight,
       CircleHelp,
@@ -130,18 +123,16 @@ function message(text: string, error = false) {
 }
 function update() {
   $("count").textContent = `${input.value.length.toLocaleString()} / 20,000`;
-  for (const id of ["translate", "translate-file", "swap", "pick-file"])
+  for (const id of ["translate", "swap"])
     $<HTMLButtonElement>(id).disabled = busy || !ready;
   $<HTMLButtonElement>("translate").disabled ||= !input.value.trim();
   $<HTMLButtonElement>("clear").disabled =
     busy || (!input.value && !output.value);
-  $<HTMLButtonElement>("translate-file").disabled ||= !documentPath;
   $<HTMLButtonElement>("swap").disabled ||= !info?.languages
     .find((language) => language.code === target.value)
     ?.targets.includes(source.value);
   source.disabled = target.disabled = busy || !ready;
   $<HTMLButtonElement>("copy").disabled = !output.value || busy;
-  $<HTMLButtonElement>("save").disabled = !output.value || busy;
   $("empty-result").hidden = !!output.value;
   output.hidden = !output.value;
   const stale =
@@ -157,9 +148,6 @@ function update() {
   $("translate").innerHTML = busy
     ? '<i data-lucide="loader-circle" class="spin"></i><span>正在翻译</span>'
     : '<span>翻译文字</span><i data-lucide="arrow-right"></i>';
-  $("translate-file").innerHTML = busy
-    ? '<i data-lucide="loader-circle" class="spin"></i><span>正在处理</span>'
-    : '<span>翻译文档</span><i data-lucide="arrow-right"></i>';
   icons();
 }
 function fillSelect(
@@ -185,14 +173,12 @@ function fillTargets(preferred = target.value) {
 }
 function switchView(next: string) {
   view = next;
-  for (const key of ["text", "file", "models"])
-    $(`${key}-view`).hidden = key !== next;
+  for (const key of ["text", "models"]) $(`${key}-view`).hidden = key !== next;
   document
     .querySelectorAll<HTMLButtonElement>("[data-view]")
     .forEach((b) => b.classList.toggle("active", b.dataset.view === next));
   $("language-toolbar").hidden = next === "models";
-  $("heading").textContent =
-    next === "file" ? "文档翻译" : next === "models" ? "本地模型" : "文字翻译";
+  $("heading").textContent = next === "models" ? "本地模型" : "文字翻译";
   message("");
 }
 async function load() {
@@ -315,49 +301,7 @@ $("copy").onclick = async () => {
     message("复制失败，请选中译文后按 Ctrl+C。", true);
   }
 };
-$("save").onclick = async () => {
-  try {
-    if (await invoke<boolean>("save_text", { text: output.value }))
-      message("译文已保存");
-  } catch (e) {
-    message(String(e), true);
-  }
-};
-$("pick-file").onclick = async () => {
-  try {
-    const path = await invoke<string | null>("pick_document");
-    if (path) {
-      documentPath = path;
-      $("file-title").textContent = path.split(/[\\/]/).pop()!;
-      $("file-description").textContent = path;
-      update();
-      message("");
-    }
-  } catch (e) {
-    message(String(e), true);
-  }
-};
-$("translate-file").onclick = async () => {
-  if (busy || !documentPath || !ready) return;
-  busy = true;
-  message("");
-  update();
-  try {
-    const reply = await invoke<Reply<{ path: string }> | null>(
-      "translate_document",
-      { path: documentPath, source: source.value, target: target.value },
-    );
-    if (reply)
-      message(
-        `翻译完成，用时 ${reply.elapsed.toFixed(1)} 秒。已保存：${reply.data.path}`,
-      );
-  } catch (e) {
-    message(String(e), true);
-  } finally {
-    busy = false;
-    update();
-  }
-};
+
 document
   .querySelectorAll<HTMLButtonElement>("[data-view]")
   .forEach(
@@ -406,14 +350,7 @@ document.addEventListener("contextmenu", (event) => {
   }
 });
 window.addEventListener("pagehide", () => {
-  input.value =
-    output.value =
-    documentPath =
-    translatedSource =
-    translatedDirection =
-      "";
-  $("file-title").textContent = "选择文档";
-  $("file-description").textContent = "译文另存为新文件";
+  input.value = output.value = translatedSource = translatedDirection = "";
   message("");
 });
 icons();

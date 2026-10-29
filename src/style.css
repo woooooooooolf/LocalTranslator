@@ -483,69 +483,6 @@ kbd {
   width: 16px;
   height: 16px;
 }
-.document-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: 12px;
-  flex: 1;
-  min-height: 0;
-  text-align: center;
-  padding: 22px;
-  overflow: auto;
-}
-.file-symbol {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 15px;
-  width: 50px;
-  height: 50px;
-  flex-shrink: 0;
-  background: var(--tint);
-  color: var(--accent);
-  border-radius: 13px;
-}
-.file-symbol svg {
-  width: 25px;
-  height: 25px;
-}
-.document-card h2 {
-  font-size: 17px;
-  font-weight: 500;
-  margin: 0 0 9px;
-  overflow-wrap: anywhere;
-  max-width: 100%;
-}
-.document-card > p {
-  color: var(--muted);
-  font-size: 12px;
-  margin: 0 0 18px;
-  overflow-wrap: anywhere;
-  max-width: 100%;
-}
-.format-tags {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  margin: 18px 0 13px;
-}
-.format-tags span {
-  font-size: 10px;
-  padding: 4px 7px;
-  border-radius: 4px;
-  background: var(--hover);
-  color: var(--muted);
-}
-.file-detail,
-.file-note {
-  font-size: 11px;
-  color: var(--faint);
-  line-height: 1.8;
-}
 #models-view {
   overflow-y: auto;
 }

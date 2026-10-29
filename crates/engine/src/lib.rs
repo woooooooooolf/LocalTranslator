@@ -1,4 +1,3 @@
-pub mod documents;
 mod ffi;
 mod sbd;
 
@@ -8,11 +7,9 @@ use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, HashMap},
     io::{BufRead, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     time::Instant,
 };
-
-pub const FORMATS: &[&str] = &["txt", "docx", "pptx", "odt", "odp", "epub", "html", "srt"];
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Package {
@@ -102,7 +99,7 @@ impl Engine {
         }
         json!({"languages":languages.into_values().collect::<Vec<_>>(),
             "packages":self.packages.iter().map(|p|json!({"from":p.from_code,"to":p.to_code,"version":p.package_version})).collect::<Vec<_>>(),
-            "formats":FORMATS, "native":true})
+            "formats":[], "native":true})
     }
     fn load(&mut self, source: &str, target: &str) -> Result<&mut Loaded, String> {
         if source == target {
@@ -202,19 +199,6 @@ impl Engine {
         }
         Ok(paragraphs.join("\n"))
     }
-    pub fn translate_file(
-        &mut self,
-        input: &Path,
-        output: &Path,
-        source: &str,
-        target: &str,
-    ) -> Result<(), String> {
-        // Resolve language/model availability before any output is created.
-        self.load(source, target)?;
-        documents::translate(input, output, |text| {
-            self.translate_content(text, source, target)
-        })
-    }
     pub fn request(&mut self, payload: &Value) -> Result<Value, String> {
         let source = payload["source"].as_str().unwrap_or("");
         let target = payload["target"].as_str().unwrap_or("");
@@ -232,12 +216,6 @@ impl Engine {
             "tokenize" => Ok(
                 json!({"tokens":self.tokenize(payload["text"].as_str().unwrap_or(""), source, target)?}),
             ),
-            "file" => {
-                let input = Path::new(payload["path"].as_str().ok_or("文档路径无效")?);
-                let output = Path::new(payload["output"].as_str().ok_or("译文路径无效")?);
-                self.translate_file(input, output, source, target)?;
-                Ok(json!({"path":output}))
-            }
             _ => Err("不支持的请求。".into()),
         }
     }

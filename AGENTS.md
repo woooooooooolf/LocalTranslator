@@ -2,9 +2,9 @@
 
 - Work only in this project; the original `D:\AIWorkSpace_ZCode\翻译` is a read-only source for copying runtime assets.
 - Validate each functional iteration and create a local Git commit at appropriate granularity. Preserve unrelated files. Do not push, tag, or publish unless requested.
-- Translation input and output stay in memory. Do not add drafts, translation history, browser storage, content logs, or automatic clipboard writes. Explicit copy/save actions are user controlled.
+- Translation input and output stay in memory. Do not add drafts, translation history, browser storage, content logs, automatic clipboard writes, or file saving. Clipboard writes require an explicit user copy action.
 - Keep WebView2 InPrivate, general autofill disabled, password autosave disabled, and per-process scratch sessions with cleanup. Do not replace native setting checks with HTML attributes alone.
-- Document conversion may use temporary copies within the current session and explicit output paths; disclose cleanup and crash limitations accurately.
+- The user removed all document translation and file-saving features. Keep the app text-only with explicit clipboard copy; do not reintroduce file import/export UI, commands, or document dependencies without authorization.
 - Verify actual model translation, privacy lifecycle, frontend build and relevant Rust checks after changes. Distinguish source review, automated checks, native desktop proof, and user visual acceptance.
 - Keep fixed UI copy concise, support light/dark themes, and let text editors fill the window. Preserve text editing context menus while blocking context menus elsewhere.
 - Native migration is now authorized and active on `codex/native-single-exe`. Preserve the 0.2.0 baseline and comparison runtime. The user explicitly removed PDF translation; do not add PDF/font/OCR dependencies. Target one EXE plus external model data, without extracting Python or application DLLs. Keep runtime model downloads separate unless explicitly implemented and verified.
