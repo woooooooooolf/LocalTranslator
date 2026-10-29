@@ -139,5 +139,5 @@ jobs:
           if [ -f "docs/releases/$RELEASE_TAG.md" ]; then
             gh release create "$RELEASE_TAG" --verify-tag --title "LocalTranslator $RELEASE_TAG" --notes-file "docs/releases/$RELEASE_TAG.md" release-assets/*
           else
-            gh release create "$RELEASE_TAG" --verify-tag --title "LocalTranslator $RELEASE_TAG" --generate-notes release-assets/*
+            gh release create "$RELEASE_TAG" --verify-tag --title "LocalTranslator $RELEASE_TAG" --notes "Windows x64 版本。请从附件下载 EXE，并使用 SHA256SUMS.txt 校验。模型在程序内单独下载。" release-assets/*
           fi
