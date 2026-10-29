@@ -44,18 +44,32 @@ int jy_model_new(const char* path, void** handle, char** error) noexcept {
 int jy_translate(void* handle, const char* tokens_json, char** output, char** error) noexcept {
   *output = nullptr; *error = nullptr;
   try {
-    const auto input = nlohmann::json::parse(tokens_json).get<std::vector<std::vector<std::string>>>();
+    const auto request = nlohmann::json::parse(tokens_json);
+    const auto input = (request.is_array() ? request : request.at("tokens")).get<std::vector<std::vector<std::string>>>();
+    const auto prefix = request.is_object() && request.contains("target_prefix") && request["target_prefix"].is_string()
+      ? request["target_prefix"].get<std::string>() : std::string();
     ctranslate2::TranslationOptions options;
     options.beam_size = 4;
     options.num_hypotheses = 1;
-    options.length_penalty = 0.2f;
-    options.replace_unknowns = true;
-    auto results = static_cast<ctranslate2::Translator*>(handle)->translate_batch(
-      input, options, 32, ctranslate2::BatchType::Tokens);
+    options.length_penalty = prefix.empty() ? 0.2f : 1.0f;
+    options.replace_unknowns = prefix.empty();
+    options.max_decoding_length = prefix.empty() ? 256 : 512;
+    // Multilingual inputs are bounded in Rust; never silently truncate them.
+    if (!prefix.empty()) options.max_input_length = 0;
+    auto* translator = static_cast<ctranslate2::Translator*>(handle);
+    auto results = prefix.empty()
+      ? translator->translate_batch(input, options, 32, ctranslate2::BatchType::Tokens)
+      : translator->translate_batch(input, std::vector<std::vector<std::string>>(input.size(), {prefix}), options, 32, ctranslate2::BatchType::Tokens);
     std::vector<std::string> pieces;
     for (const auto& result : results) {
       if (result.hypotheses.empty()) throw std::runtime_error("empty hypothesis");
-      pieces.insert(pieces.end(), result.hypotheses[0].begin(), result.hypotheses[0].end());
+      auto begin = result.hypotheses[0].begin();
+      if (!prefix.empty()) {
+        if (begin == result.hypotheses[0].end() || *begin != prefix || result.hypotheses[0].size() >= options.max_decoding_length)
+          throw std::runtime_error("invalid multilingual result");
+        ++begin;
+      }
+      pieces.insert(pieces.end(), begin, result.hypotheses[0].end());
     }
     *output = copy_string(nlohmann::json(pieces).dump());
     return 0;

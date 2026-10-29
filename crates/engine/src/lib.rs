@@ -22,18 +22,30 @@ pub struct Package {
     pub to_name: String,
     #[serde(default)]
     pub target_prefix: String,
+    #[serde(default)]
+    pub model_type: ModelType,
+    #[serde(default)]
+    pub bidirectional: bool,
     #[serde(skip)]
     pub path: PathBuf,
+}
+#[derive(Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelType {
+    #[default]
+    Argos,
+    M2m100,
 }
 struct Loaded {
     tokenizer: SentencePieceProcessor,
     model: ffi::Model,
-    sbd: sbd::SentenceDetector,
+    detectors: HashMap<String, sbd::SentenceDetector>,
+    model_type: ModelType,
 }
 pub struct Engine {
     model_root: PathBuf,
     packages: Vec<Package>,
-    loaded: HashMap<String, Loaded>,
+    loaded: HashMap<PathBuf, Loaded>,
     revision: Vec<u8>,
 }
 impl Engine {
@@ -68,7 +80,9 @@ impl Engine {
             };
             if package.from_code.is_empty()
                 || package.to_code.is_empty()
-                || !package.target_prefix.is_empty()
+                || (package.model_type == ModelType::Argos && !package.target_prefix.is_empty())
+                || (package.model_type == ModelType::M2m100
+                    && package.target_prefix != format!("__{}__", package.to_code))
                 || !path.join("model/model.bin").is_file()
                 || !path.join("sentencepiece.model").is_file()
                 || !self
@@ -80,6 +94,20 @@ impl Engine {
                 continue;
             }
             package.path = path;
+            if package.model_type == ModelType::M2m100
+                && package.bidirectional
+                && self
+                    .model_root
+                    .join("minisbd")
+                    .join(format!("{}.onnx", sbd_language(&package.to_code)))
+                    .is_file()
+            {
+                let mut reverse = package.clone();
+                std::mem::swap(&mut reverse.from_code, &mut reverse.to_code);
+                std::mem::swap(&mut reverse.from_name, &mut reverse.to_name);
+                reverse.target_prefix = format!("__{}__", reverse.to_code);
+                self.packages.push(reverse);
+            }
             self.packages.push(package);
         }
         self.packages.sort_by(|a, b| {
@@ -114,33 +142,39 @@ impl Engine {
         if source == target {
             return Err("请选择不同的源语言和目标语言。".into());
         }
-        let key = format!("{source}-{target}");
+        let package = self
+            .packages
+            .iter()
+            .find(|p| p.from_code == source && p.to_code == target)
+            .ok_or("没有安装对应方向的本地模型。")?
+            .clone();
+        // Multilingual directions share one tokenizer and model allocation.
+        let key = package.path.clone();
         if !self.loaded.contains_key(&key) {
-            let package = self
-                .packages
-                .iter()
-                .find(|p| p.from_code == source && p.to_code == target)
-                .ok_or("没有安装对应方向的本地模型。")?;
             let tokenizer = SentencePieceProcessor::open(package.path.join("sentencepiece.model"))
                 .map_err(|_| "无法加载 SentencePiece 模型")?;
             let model = ffi::Model::load(&package.path.join("model"))?;
-            let language = sbd_language(source);
-            let sbd = sbd::SentenceDetector::load(
-                &self
-                    .model_root
-                    .join("minisbd")
-                    .join(format!("{language}.onnx")),
-            )?;
             self.loaded.insert(
                 key.clone(),
                 Loaded {
                     tokenizer,
                     model,
-                    sbd,
+                    detectors: HashMap::new(),
+                    model_type: package.model_type,
                 },
             );
         }
-        Ok(self.loaded.get_mut(&key).unwrap())
+        let loaded = self.loaded.get_mut(&key).unwrap();
+        if !loaded.detectors.contains_key(source) {
+            let detector = sbd::SentenceDetector::load(
+                &self
+                    .model_root
+                    .join("minisbd")
+                    .join(format!("{}.onnx", sbd_language(source))),
+            )?;
+            loaded.detectors.insert(source.into(), detector);
+        }
+        Ok(loaded)
     }
     pub fn sentences(
         &mut self,
@@ -148,7 +182,11 @@ impl Engine {
         source: &str,
         target: &str,
     ) -> Result<Vec<String>, String> {
-        self.load(source, target)?.sbd.sentences(text)
+        self.load(source, target)?
+            .detectors
+            .get_mut(source)
+            .unwrap()
+            .sentences(text)
     }
     pub fn tokenize(
         &mut self,
@@ -156,10 +194,13 @@ impl Engine {
         source: &str,
         target: &str,
     ) -> Result<Vec<String>, String> {
-        self.load(source, target)?
-            .tokenizer
-            .encode(text)
-            .map_err(|_| "分词失败".into())
+        let loaded = self.load(source, target)?;
+        let mut tokens = loaded.tokenizer.encode(text).map_err(|_| "分词失败")?;
+        if loaded.model_type == ModelType::M2m100 {
+            tokens.insert(0, format!("__{source}__"));
+            tokens.push("</s>".into());
+        }
+        Ok(tokens)
     }
     pub fn translate(&mut self, text: &str, source: &str, target: &str) -> Result<String, String> {
         if text.trim().is_empty() || text.chars().count() > 20000 {
@@ -179,7 +220,11 @@ impl Engine {
         let loaded = self.load(source, target)?;
         let mut paragraphs = Vec::new();
         for paragraph in text.split('\n') {
-            let sentences = loaded.sbd.sentences(paragraph)?;
+            let sentences = loaded
+                .detectors
+                .get_mut(source)
+                .unwrap()
+                .sentences(paragraph)?;
             if sentences.is_empty() {
                 paragraphs.push(String::new());
                 continue;
@@ -193,12 +238,37 @@ impl Engine {
                         .map_err(|_| "分词失败".to_string())
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let pieces = loaded.model.translate(&tokens)?;
+            let multilingual = loaded.model_type == ModelType::M2m100;
+            let tokens = if multilingual {
+                tokens
+                    .into_iter()
+                    .flat_map(|pieces| {
+                        pieces
+                            .chunks(480)
+                            .map(|chunk| {
+                                let mut tokens = Vec::with_capacity(chunk.len() + 2);
+                                tokens.push(format!("__{source}__"));
+                                tokens.extend_from_slice(chunk);
+                                tokens.push("</s>".into());
+                                tokens
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect()
+            } else {
+                tokens
+            };
+            let prefix = multilingual.then(|| format!("__{target}__"));
+            let pieces = loaded.model.translate(&tokens, prefix.as_deref())?;
             let value = loaded
                 .tokenizer
                 .decode(&pieces)
-                .map_err(|_| "译文解码失败")?
-                .replace(['\u{2581}', '_'], " ");
+                .map_err(|_| "译文解码失败")?;
+            let value = if multilingual {
+                value
+            } else {
+                value.replace(['\u{2581}', '_'], " ")
+            };
             paragraphs.push(value.strip_prefix(' ').unwrap_or(&value).to_owned());
         }
         Ok(paragraphs.join("\n"))

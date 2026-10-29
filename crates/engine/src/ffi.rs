@@ -38,11 +38,16 @@ impl Model {
         }
         Ok(Self(handle))
     }
-    pub fn translate(&mut self, tokens: &[Vec<String>]) -> Result<Vec<String>, String> {
+    pub fn translate(
+        &mut self,
+        tokens: &[Vec<String>],
+        target_prefix: Option<&str>,
+    ) -> Result<Vec<String>, String> {
         if tokens.is_empty() {
             return Ok(Vec::new());
         }
-        let json = CString::new(serde_json::to_vec(tokens).map_err(|_| "无法编码翻译请求")?)
+        let payload = serde_json::json!({"tokens":tokens,"target_prefix":target_prefix});
+        let json = CString::new(serde_json::to_vec(&payload).map_err(|_| "无法编码翻译请求")?)
             .map_err(|_| "翻译请求无效")?;
         let (mut output, mut error) = (ptr::null_mut(), ptr::null_mut());
         let status = unsafe { jy_translate(self.0, json.as_ptr(), &mut output, &mut error) };
