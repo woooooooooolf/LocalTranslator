@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, HashMap},
     io::{BufRead, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Instant,
 };
 
@@ -34,6 +34,7 @@ pub struct Engine {
     model_root: PathBuf,
     packages: Vec<Package>,
     loaded: HashMap<String, Loaded>,
+    revision: Vec<u8>,
 }
 impl Engine {
     pub fn new(model_root: PathBuf) -> Self {
@@ -41,11 +42,14 @@ impl Engine {
             model_root,
             packages: Vec::new(),
             loaded: HashMap::new(),
+            revision: Vec::new(),
         };
         engine.refresh();
         engine
     }
     pub fn refresh(&mut self) {
+        self.revision =
+            std::fs::read(self.model_root.join(".manager/revision")).unwrap_or_default();
         self.loaded.clear();
         self.packages.clear();
         let Ok(entries) = std::fs::read_dir(self.model_root.join("packages")) else {
@@ -67,6 +71,11 @@ impl Engine {
                 || !package.target_prefix.is_empty()
                 || !path.join("model/model.bin").is_file()
                 || !path.join("sentencepiece.model").is_file()
+                || !self
+                    .model_root
+                    .join("minisbd")
+                    .join(format!("{}.onnx", sbd_language(&package.from_code)))
+                    .is_file()
             {
                 continue;
             }
@@ -115,12 +124,7 @@ impl Engine {
             let tokenizer = SentencePieceProcessor::open(package.path.join("sentencepiece.model"))
                 .map_err(|_| "无法加载 SentencePiece 模型")?;
             let model = ffi::Model::load(&package.path.join("model"))?;
-            let language = match source {
-                "zh" => "zh-hans",
-                "zt" => "zh-hant",
-                "pb" => "pt",
-                other => other,
-            };
+            let language = sbd_language(source);
             let sbd = sbd::SentenceDetector::load(
                 &self
                     .model_root
@@ -200,6 +204,11 @@ impl Engine {
         Ok(paragraphs.join("\n"))
     }
     pub fn request(&mut self, payload: &Value) -> Result<Value, String> {
+        let _lock = lock_models(&self.model_root, false)?;
+        let revision = std::fs::read(self.model_root.join(".manager/revision")).unwrap_or_default();
+        if revision != self.revision {
+            self.refresh();
+        }
         let source = payload["source"].as_str().unwrap_or("");
         let target = payload["target"].as_str().unwrap_or("");
         match payload["op"].as_str().unwrap_or("") {
@@ -219,6 +228,65 @@ impl Engine {
             _ => Err("不支持的请求。".into()),
         }
     }
+}
+
+fn sbd_language(source: &str) -> &str {
+    match source {
+        "zh" => "zh-hans",
+        "zt" => "zh-hant",
+        "pb" => "pt",
+        other => other,
+    }
+}
+
+/// Cross-process advisory lock shared by inference and explicit model changes.
+/// Only model-management metadata is written; translation text is never stored.
+pub fn lock_models(root: &Path, exclusive: bool) -> Result<std::fs::File, String> {
+    plain_directory(root)?;
+    let directory = root.join(".manager");
+    plain_directory(&directory)?;
+    let path = directory.join("lock");
+    reject_link(&path)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(path)
+        .map_err(|_| "模型目录不可写，请将 EXE 放到有写入权限的文件夹。")?;
+    let result = if exclusive {
+        fs2::FileExt::try_lock_exclusive(&file)
+    } else {
+        fs2::FileExt::try_lock_shared(&file)
+    };
+    result.map_err(|_| "模型正在被其他操作使用，请稍后重试。")?;
+    Ok(file)
+}
+
+pub fn reject_link(path: &Path) -> Result<(), String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            #[cfg(windows)]
+            let linked = {
+                use std::os::windows::fs::MetadataExt;
+                metadata.file_attributes() & 0x400 != 0
+            };
+            #[cfg(not(windows))]
+            let linked = metadata.file_type().is_symlink();
+            if linked {
+                return Err("模型管理不支持符号链接或目录联接。".into());
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err("无法检查模型目录。".into()),
+    }
+    Ok(())
+}
+
+pub fn plain_directory(path: &Path) -> Result<(), String> {
+    reject_link(path)?;
+    std::fs::create_dir_all(path)
+        .map_err(|_| "模型目录不可写，请将 EXE 放到有写入权限的文件夹。".to_owned())
 }
 /// Explicit command-line mode for offline integration checks; no transcript files.
 pub fn run_stdio(model_root: PathBuf) {

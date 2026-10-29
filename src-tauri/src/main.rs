@@ -1,9 +1,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod models;
 mod privacy;
 
 use serde_json::{json, Value};
-use std::{fs, path::PathBuf, sync::Mutex, time::Instant};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 use tauri::{Manager, State};
 
 struct Engine {
@@ -50,6 +56,58 @@ fn runtime_location(engine: State<'_, Engine>) -> String {
 }
 
 #[tauri::command]
+fn model_catalog(engine: State<'_, Engine>) -> Value {
+    models::list(&engine.root.join("models"))
+}
+#[tauri::command]
+fn model_progress(manager: State<'_, Arc<models::ModelManager>>) -> models::Progress {
+    manager.status()
+}
+#[tauri::command]
+fn cancel_model_download(manager: State<'_, Arc<models::ModelManager>>) {
+    manager.cancel();
+}
+#[tauri::command]
+async fn install_model(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let manager = app.state::<Arc<models::ModelManager>>().inner().clone();
+    let _operation = manager.begin(&id, true)?;
+    let root = app.state::<Engine>().root.join("models");
+    let _lock = jingyi_engine::lock_models(&root, true)?;
+    let model = models::catalog()
+        .into_iter()
+        .find(|m| m.id == id)
+        .ok_or("不支持的模型。")?;
+    if root.join("packages").join(&model.folder).exists() {
+        return Err("此模型目录已存在，请先删除后重新下载。".into());
+    }
+    let stage = manager.prepare(&root, &model).await?;
+    let worker = manager.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Engine>();
+        let mut engine = state.inner.lock().map_err(|_| "翻译引擎状态异常。")?;
+        worker.install(&root, &model, stage.path(), &mut engine)
+    })
+    .await
+    .map_err(|_| "模型安装任务异常。")?
+}
+#[tauri::command]
+async fn remove_model(app: tauri::AppHandle, id: String) -> Result<(), String> {
+    let manager = app.state::<Arc<models::ModelManager>>().inner().clone();
+    let _operation = manager.begin(&id, false)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Engine>();
+        let mut engine = state.inner.lock().map_err(|_| "翻译引擎状态异常。")?;
+        app.state::<Arc<models::ModelManager>>().remove(
+            &state.root.join("models"),
+            &id,
+            &mut engine,
+        )
+    })
+    .await
+    .map_err(|_| "模型删除任务异常。")?
+}
+
+#[tauri::command]
 fn third_party_notices() -> &'static str {
     include_str!("../third-party-notices.txt")
 }
@@ -91,6 +149,7 @@ fn main() {
                 root: root.clone(),
                 inner: Mutex::new(jingyi_engine::Engine::new(root.join("models"))),
             });
+            app.manage(Arc::new(models::ModelManager::default()));
             let window = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
@@ -114,6 +173,7 @@ fn main() {
             runtime_location,
             third_party_notices,
             set_appearance
+            ,model_catalog, model_progress, cancel_model_download, install_model, remove_model
         ])
         .build(tauri::generate_context!())
         .expect("无法启动静译");

@@ -13,7 +13,11 @@ parser.add_argument('--exe', type=Path, default=ROOT/'crates/engine/target/relea
 args = parser.parse_args()
 native_exe = args.exe.resolve()
 models = ROOT/'models' if native_exe.name == 'check-engine.exe' else native_exe.parent/'models'
-model_fingerprints={str(path.relative_to(models)):hashlib.sha256(path.read_bytes()).hexdigest() for path in models.rglob('*') if path.is_file()}
+def weight_fingerprints():
+    # Model coordination contains only an OS lock and revision stamp, never text.
+    return {str(path.relative_to(models)):hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in models.rglob('*') if path.is_file() and '.manager' not in path.relative_to(models).parts}
+model_fingerprints=weight_fingerprints()
 command = [str(native_exe), str(models)] if native_exe.name == 'check-engine.exe' else [str(native_exe), '--stdio']
 report = {'tokenization': 0, 'sentence_boundaries': 0, 'translation_exact': 0, 'translation_total': 0, 'differences': [], 'file_requests_rejected': 0}
 
@@ -98,7 +102,7 @@ with tempfile.TemporaryDirectory(prefix='native-check-',dir=ROOT/'.cache') as te
         report['file_requests_rejected']+=1
     finally:
         native.close();baseline.close()
-assert model_fingerprints == {str(path.relative_to(models)):hashlib.sha256(path.read_bytes()).hexdigest() for path in models.rglob('*') if path.is_file()}, 'Model directory was modified'
+assert model_fingerprints == weight_fingerprints(), 'Model weights were modified'
 (ROOT/'.cache/native-engine-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
 print(json.dumps({key:value for key,value in report.items() if key!='differences'},ensure_ascii=False))
 print('Differences recorded:',len(report['differences']))

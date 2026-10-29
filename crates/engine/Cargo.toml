@@ -1,6 +1,6 @@
 [package]
 name = "jingyi-engine"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 
 [dependencies]
@@ -10,3 +10,4 @@ sentencepiece-rs = "=0.2.2"
 ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std"] }
 regex = "1"
 fancy-regex = "0.16"
+fs2 = "0.4"
