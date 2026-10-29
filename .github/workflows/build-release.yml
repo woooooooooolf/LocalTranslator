@@ -106,7 +106,7 @@ jobs:
           New-Item -ItemType Directory -Force release/assets | Out-Null
           Copy-Item -LiteralPath $exe -Destination "release/assets/$name"
           $hash = (Get-FileHash "release/assets/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  $name" | Set-Content release/assets/SHA256SUMS.txt -Encoding utf8NoBOM
+          [System.IO.File]::WriteAllText((Join-Path (Get-Location) 'release/assets/SHA256SUMS.txt'), "$hash  $name`n", [System.Text.UTF8Encoding]::new($false))
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-x64
