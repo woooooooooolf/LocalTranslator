@@ -8,6 +8,7 @@
 - 最终本地 EXE 通过独立目录、PATH 仅含 System32 的显式 stdio 检查：无模型时可返回状态，不解压 Python/DLL，拒绝文件输出，stderr 为空。隔离副本通过 22 个分词、24 个分句、22 个真实翻译回归；11/22 与旧 Python 后端逐字相同，权重哈希不变，和 0.3.1/0.4.0 的差异范围一致。
 - 版本资源为 1.0.0 / LocalTranslator，文件名为 `LocalTranslator_V1.0.0_Windows_x64.exe`。PE 直接依赖均为 Windows 系统 DLL / UCRT API，仍依赖系统 WebView2。该本地产物 SHA-256 为 `61A07BCF6868BBC93B8218AC716335548A54E6EFE6774131FF5C493D2B33AABF`；Actions 使用另一套 MSVC 环境重新构建，Release 的校验值以附件 SHA256SUMS.txt 为准，不要求不同工具链位级相同。
 - 本地正式窗口启动并通过 WebView2 隐私原生读回，AX 可见 InPrivate、中文默认界面、English 按钮及 0 / 2 模型状态。截图/点击仍分别报 `window capture timed out` / `coordinate input geometry is unavailable`；不将此当成原生中英文切换的完整鼠标验收。浏览器行为和图片检查与原生桌面启动证据分开记录。
+- 用户随后在正式原生窗口手动核对，并确认“界面与翻译方向切换正常”：English 对应英语→中文，切回中文恢复中文→英语。该项为用户人工验收，区别于前述自动化能力限制。
 - 跨平台源码评估：构建脚本、静态 `.lib` 收集、advapi32/DXCore 链接和 WebView2 隐私读回均针对 Windows。Linux/macOS 需要单独迁移与验证，V1.0.0 仅发布 Windows x64。
 - 工作流已由 actionlint 检查；使用固定提交的 Actions、默认只读权限、标签发布任务独立 contents:write 权限，发布前检查版本、UI/原生/真实权重、独立 EXE 和 DLL 依赖，输出 EXE 与 SHA256SUMS.txt。远端构建完成情况以对应 GitHub Actions / Release 记录为准。
 
