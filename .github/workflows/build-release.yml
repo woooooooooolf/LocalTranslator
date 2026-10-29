@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
@@ -54,13 +55,21 @@ jobs:
             .cache/native/build/lib
             .cache/onnx/lib
             .cache/native-src
-          key: windows-2022-native-v1-${{ hashFiles('native/**', 'scripts/build-native.ps1', 'scripts/build-onnx.ps1', 'scripts/msvc-env.ps1') }}
+          key: windows-2022-native-v1-${{ hashFiles('native/**', 'scripts/build-native.ps1', 'scripts/build-onnx.ps1', 'scripts/msvc-env.ps1', '.cargo/config.toml') }}
+          restore-keys: |
+            windows-2022-native-v1-326d29fc7586273282b3d961926557762996e5a0c0ce3fa7ab31d95687a73dc8
       - name: Build static CPU libraries
         if: steps.native.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           ./scripts/build-native.ps1 -Jobs 3
-          ./scripts/build-onnx.ps1 -Jobs 3
+          # The fallback is the verified V1.0.0 cache. Reuse its ONNX archive only
+          # while every ONNX build input is unchanged; always rebuild our bridge.
+          git diff --quiet V1.0.0 -- scripts/build-onnx.ps1 scripts/msvc-env.ps1 native/msvc_response.py native/msvc_response.cmake .cargo/config.toml
+          $ortInputsUnchanged = $LASTEXITCODE -eq 0
+          if (!(Test-Path .cache/onnx/lib/onnxruntime.lib) -or !$ortInputsUnchanged) {
+            ./scripts/build-onnx.ps1 -Jobs 3
+          }
       - uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
           workspaces: |
@@ -71,6 +80,8 @@ jobs:
         with:
           path: .cache/model-downloads
           key: model-fixtures-${{ hashFiles('src-tauri/model-catalog.json') }}
+          restore-keys: |
+            model-fixtures-
       - name: Test UI, native privacy and real models
         shell: pwsh
         run: |
@@ -87,7 +98,9 @@ jobs:
           cargo test --locked --manifest-path src-tauri/Cargo.toml --bin local-translate -j 3
           if ($LASTEXITCODE) { throw 'Native tests failed' }
           python scripts/fetch-model-catalog.py --verify
-          if ($LASTEXITCODE) { throw 'Official model verification failed' }
+          if ($LASTEXITCODE) { throw 'Pinned model verification failed' }
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --bin local-translate japanese_https_prefix_matches_verified_cache -- --ignored --nocapture
+          if ($LASTEXITCODE) { throw 'Pinned model HTTPS route check failed' }
           cargo test --locked --manifest-path src-tauri/Cargo.toml --bin local-translate cached_install_translate_remove -- --ignored --nocapture
           if ($LASTEXITCODE) { throw 'Real CPU model lifecycle test failed' }
       - name: Build standalone executable

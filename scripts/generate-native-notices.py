@@ -35,6 +35,7 @@ native=[
  ('Eigen (MPL2-only build)','.cache/native-src/eigen/COPYING.MPL2'),
  ('MiniSBD preprocessing attribution','third_party/minisbd/LICENSE.txt'),
  ('MiniSBD preprocessing credits','third_party/minisbd/CREDITS.txt'),
+ ('M2M100 model license','third_party/m2m100/LICENSE.txt'),
  ('Lucide','node_modules/lucide/LICENSE'),
 ]
 for name,relative in native:

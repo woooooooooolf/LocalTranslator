@@ -39,6 +39,8 @@ type Model = {
   bytes: number;
   installed: boolean;
   present: boolean;
+  name?: string;
+  bidirectional?: boolean;
 };
 type Progress = {
   active: boolean;
@@ -82,7 +84,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <div class="editor-pane output-pane"><div class="pane-header"><span>译文</span><span id="result-time"></span></div><div class="output-container"><div class="empty-result" id="empty-result"><i data-lucide="languages"></i><span>译文</span></div><textarea id="output" readonly autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="翻译结果" hidden></textarea></div><div class="pane-footer output-tools"><span id="result-label"></span><div><button class="icon-button" id="copy" title="复制译文" aria-label="复制译文" disabled><i data-lucide="copy"></i></button></div></div></div></div>
         <div class="action-row"><span class="keyboard-hint"><kbd>Ctrl</kbd> + <kbd>Enter</kbd> 快速翻译</span><button class="primary" id="translate" disabled><span>翻译文字</span><i data-lucide="arrow-right"></i></button></div>
       </section>
-      <section id="models-view" class="view" hidden><div class="models-header"><h2>中英模型</h2><span class="model-count" id="model-count">加载中</span><button class="secondary" id="refresh-models">刷新</button></div><div id="model-list" class="model-list"></div><div class="download-progress" id="download-progress" hidden role="status"><div><span id="download-label">准备下载</span><button class="secondary" id="cancel-download">取消</button></div><progress id="download-bar" max="100" value="0" aria-label="模型下载进度"></progress><span id="download-size"></span></div><div class="model-note"><i data-lucide="folder-open"></i><div><strong>模型目录</strong><p id="model-path">models</p><span>仅点击下载时联网。来源：Argos / MiniSBD 官方源；下载后可断网使用。</span></div></div></section>
+      <section id="models-view" class="view" hidden><div class="models-header"><h2>翻译模型</h2><span class="model-count" id="model-count">加载中</span><button class="secondary" id="refresh-models">刷新</button></div><div id="model-list" class="model-list"></div><div class="download-progress" id="download-progress" hidden role="status"><div><span id="download-label">准备下载</span><button class="secondary" id="cancel-download">取消</button></div><progress id="download-bar" max="100" value="0" aria-label="模型下载进度"></progress><span id="download-size"></span></div><div class="model-note"><i data-lucide="folder-open"></i><div><strong>模型目录</strong><p id="model-path">models</p><span>仅点击下载时联网。模型来源与许可见第三方说明；下载后可断网使用。</span></div></div></section>
       <div id="message" role="status" aria-live="polite" hidden></div>
     </div>
   </main>
@@ -97,6 +99,13 @@ const output = $<HTMLTextAreaElement>("output");
 const source = $<HTMLSelectElement>("source");
 const target = $<HTMLSelectElement>("target");
 const direction = () => `${source.value}-${target.value}`;
+const supportedTargets: Record<string, string[]> = {
+  en: ["zh"],
+  zh: ["en", "ja"],
+  ja: ["zh"],
+};
+const modelDirection = (model: Model) =>
+  `${name(model.source)} ${model.bidirectional ? "↔" : "→"} ${name(model.target)}`;
 type Theme = "light" | "dark";
 let theme: Theme = window.matchMedia("(prefers-color-scheme: dark)").matches
   ? "dark"
@@ -198,12 +207,13 @@ function fillSelect(
 function fillTargets(preferred = target.value) {
   const targets =
     info?.languages.find((l) => l.code === source.value)?.targets || [];
-  const fallback = source.value === "zh" ? "en" : "zh";
   const languages = (info?.languages || []).filter((l) =>
     targets.includes(l.code),
   );
-  if (!languages.some((l) => l.code === fallback))
-    languages.push({ code: fallback, name: name(fallback), targets: [] });
+  for (const code of supportedTargets[source.value] || []) {
+    if (!languages.some((l) => l.code === code))
+      languages.push({ code, name: name(code), targets: [] });
+  }
   fillSelect(target, languages, preferred);
   ready = !!info?.packages.some(
     (p) => p.from === source.value && p.to === target.value,
@@ -214,7 +224,7 @@ function fillSources(preferred = source.value) {
   const languages = [
     ...(info?.languages || []).filter((l) => l.targets.length),
   ];
-  for (const code of ["zh", "en"])
+  for (const code of ["zh", "en", "ja"])
     if (!languages.some((l) => l.code === code))
       languages.push({ code, name: name(code), targets: [] });
   fillSelect(source, languages, preferred);
@@ -316,12 +326,9 @@ function renderModels() {
       badge.className = "model-badge";
       badge.textContent = model.source.toUpperCase();
       const title = document.createElement("h3");
-      title.textContent = `${name(model.source)} → ${name(model.target)}`;
+      title.textContent = modelDirection(model);
       const description = document.createElement("p");
-      description.textContent = tr("v{version} · 下载 {size}", {
-        version: model.version,
-        size: megabytes(model.bytes),
-      });
+      description.textContent = `${model.name || `Argos v${model.version}`} · ${tr("下载 {size}", { size: megabytes(model.bytes) })}`;
       const details = document.createElement("div");
       details.className = "model-details";
       details.append(title, description);
@@ -348,7 +355,7 @@ function renderModels() {
         if (model.present) {
           pendingDelete = model;
           $("delete-description").textContent = tr(
-            "删除“{direction}”模型？此方向将暂时无法翻译，可随时重新下载。",
+            "删除“{direction}”模型？对应翻译将暂时不可用，可随时重新下载。",
             { direction: title.textContent! },
           );
           $<HTMLDialogElement>("delete-dialog").showModal();
@@ -384,7 +391,7 @@ async function manageModel(model: Model, remove: boolean) {
       const progress = await invoke<Progress>("model_progress");
       if (!modelBusy || !progress.active) return;
       $("download-label").textContent =
-        `${name(model.source)} → ${name(model.target)} · ${tr(progress.phase)}`;
+        `${modelDirection(model)} · ${tr(progress.phase)}`;
       $("download-size").textContent = remove
         ? ""
         : `${megabytes(progress.received)} / ${megabytes(progress.total)}`;
@@ -411,6 +418,18 @@ async function manageModel(model: Model, remove: boolean) {
     modelBusy = false;
     $("download-progress").hidden = true;
     await load();
+    if (!failed && !remove && !ready) {
+      const candidates = [{ source: model.source, target: model.target }];
+      if (model.bidirectional)
+        candidates.push({ source: model.target, target: model.source });
+      const preferred = preferredDirection(getLocale());
+      const selected =
+        candidates.find((pair) => pair.target === preferred.target) ||
+        candidates.find((pair) => pair.source === preferred.source) ||
+        candidates[0];
+      fillSources(selected.source);
+      fillTargets(selected.target);
+    }
     message(result, failed);
     update();
   }

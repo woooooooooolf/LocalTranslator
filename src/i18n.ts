@@ -29,14 +29,14 @@ const english: Record<string, string> = {
   翻译结果: "Translated text",
   复制译文: "Copy translation",
   快速翻译: "Translate",
-  中英模型: "Chinese / English models",
+  翻译模型: "Translation models",
   刷新: "Refresh",
   准备下载: "Preparing download",
   取消: "Cancel",
   模型下载进度: "Model download progress",
   模型目录: "Model folder",
-  "仅点击下载时联网。来源：Argos / MiniSBD 官方源；下载后可断网使用。":
-    "Downloads use the official Argos / MiniSBD sources. Translation works offline.",
+  "仅点击下载时联网。模型来源与许可见第三方说明；下载后可断网使用。":
+    "Only explicit downloads use the network. Sources and licenses are in Third-party notices. Translation works offline.",
   关闭: "Close",
   "CPU 本地翻译": "Local CPU translation",
   第三方说明: "Third-party notices",
@@ -66,10 +66,11 @@ const english: Record<string, string> = {
   引擎需要检查: "Check the engine",
   "{seconds} 秒": "{seconds} s",
   "{installed} / {total} 已安装": "{installed} / {total} installed",
+  "下载 {size}": "{size} download",
   "v{version} · 下载 {size}": "v{version} · {size} download",
   "{action}{direction}模型": "{action} {direction} model",
-  "删除“{direction}”模型？此方向将暂时无法翻译，可随时重新下载。":
-    "Delete the {direction} model? This direction will be unavailable until you download it again.",
+  "删除“{direction}”模型？对应翻译将暂时不可用，可随时重新下载。":
+    "Delete the {direction} model? Translation using this model will be unavailable until you download it again.",
   模型管理中: "Managing models",
   删除中: "Deleting",
   下载翻译模型: "Downloading translation model",

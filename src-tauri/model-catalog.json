@@ -98,5 +98,97 @@
         "sha256": "c980413009e8041fc42c81730ad4b72ab6cb1313b3b89b1ced261fe5e177b024"
       }
     ]
+  },
+  {
+    "id": "ja-zh",
+    "source": "ja",
+    "target": "zh",
+    "version": "m2m100-418m-int8-e205afef",
+    "folder": "translate-ja_zh-m2m100-418m-int8",
+    "kind": "m2m100",
+    "name": "M2M100 418M INT8",
+    "source_profile": "418m",
+    "bidirectional": true,
+    "archive": {
+      "url": "https://huggingface.co/auralmira/m2m100-418M-ct2-int8/resolve/e205afefce2fd6933a1dca3b92b5063894f2f2bb/model.bin?download=true",
+      "size": 490667752,
+      "sha256": "137949450f9cf691f3c92084f14123e82d05ecb23ac3cd688308ce1a95214572"
+    },
+    "segmentation": {
+      "filename": "ja.onnx",
+      "url": "https://github.com/LibreTranslate/MiniSBD/releases/download/v0.0.1/ja.onnx",
+      "size": 698618,
+      "sha256": "5ef874606b0afe24cc799b737ba1d9c09259e80ddee7646fc557a8f9e0e1017c"
+    },
+    "additional_segmentation": [
+      {
+        "filename": "zh-hans.onnx",
+        "url": "https://github.com/LibreTranslate/MiniSBD/releases/download/v0.0.1/zh-hans.onnx",
+        "size": 616442,
+        "sha256": "b2a6e45ebb43df44ac3c8e4100ea1cb30ec8319c5698b678ed3f203e5edc5d0e"
+      }
+    ],
+    "downloads": [
+      {
+        "path": "model/config.json",
+        "url": "https://huggingface.co/auralmira/m2m100-418M-ct2-int8/resolve/e205afefce2fd6933a1dca3b92b5063894f2f2bb/config.json?download=true",
+        "size": 223,
+        "sha256": "8f6496adfc930cbfecbe8281112197705c488fab47d34b4829b06d7f478909af"
+      },
+      {
+        "path": "model/shared_vocabulary.json",
+        "url": "https://huggingface.co/auralmira/m2m100-418M-ct2-int8/resolve/e205afefce2fd6933a1dca3b92b5063894f2f2bb/shared_vocabulary.json?download=true",
+        "size": 2796509,
+        "sha256": "7eb5d0ff184c6095c7c10f9911c0aea492250abd12854f9c3d787c64b1c6397e"
+      },
+      {
+        "path": "sentencepiece.model",
+        "url": "https://huggingface.co/auralmira/m2m100-418M-ct2-int8/resolve/e205afefce2fd6933a1dca3b92b5063894f2f2bb/sentencepiece.bpe.model?download=true",
+        "size": 2423393,
+        "sha256": "d8f7c76ed2a5e0822be39f0a4f95a55eb19c78f4593ce609e2edbc2aea4d380a"
+      }
+    ],
+    "embedded_files": [
+      {
+        "path": "metadata.json",
+        "content": "{\"bidirectional\": true, \"from_code\": \"ja\", \"from_name\": \"Japanese\", \"model_type\": \"m2m100\", \"package_version\": \"m2m100-418m-int8-e205afef\", \"target_prefix\": \"__zh__\", \"to_code\": \"zh\", \"to_name\": \"Chinese\"}\n"
+      },
+      {
+        "path": "README.md",
+        "content": "# Japanese ↔ Chinese: M2M100 418M INT8\n\nBase model: https://huggingface.co/facebook/m2m100_418M\nCommunity conversion: https://huggingface.co/auralmira/m2m100-418M-ct2-int8\nPinned revision: e205afefce2fd6933a1dca3b92b5063894f2f2bb\n\nThis bundle contains model data only. The community conversion is not an official Meta CTranslate2 release. Translation runs locally; quality is model-dependent.\n\nMIT License\n\nCopyright (c) Facebook, Inc. and its affiliates.\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
+      }
+    ],
+    "files": [
+      {
+        "path": "model/model.bin",
+        "size": 490667752,
+        "sha256": "137949450f9cf691f3c92084f14123e82d05ecb23ac3cd688308ce1a95214572"
+      },
+      {
+        "path": "model/config.json",
+        "size": 223,
+        "sha256": "8f6496adfc930cbfecbe8281112197705c488fab47d34b4829b06d7f478909af"
+      },
+      {
+        "path": "model/shared_vocabulary.json",
+        "size": 2796509,
+        "sha256": "7eb5d0ff184c6095c7c10f9911c0aea492250abd12854f9c3d787c64b1c6397e"
+      },
+      {
+        "path": "sentencepiece.model",
+        "size": 2423393,
+        "sha256": "d8f7c76ed2a5e0822be39f0a4f95a55eb19c78f4593ce609e2edbc2aea4d380a"
+      },
+      {
+        "path": "metadata.json",
+        "size": 206,
+        "sha256": "7cc6196daec16326b5a0b1515afb67588453f1b79c1cd85e89259bd127688439"
+      },
+      {
+        "path": "README.md",
+        "size": 1482,
+        "sha256": "ceae4fd0056a9daeef38bf886f5c115788c802948205b2faac79814db8b2399a"
+      }
+    ]
   }
 ]

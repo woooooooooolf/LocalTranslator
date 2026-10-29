@@ -10,27 +10,40 @@ async function setup(page: Page, installed = true) {
         testCalls: { command: string; args: Record<string, unknown> }[];
       };
       state.testCalls = [];
+      let japanese = false;
       state.__TAURI_INTERNALS__ = {
         invoke: async (command: string, args: Record<string, unknown>) => {
           state.testCalls.push({ command, args });
-          if (command === "engine_info")
+          if (command === "engine_info") {
+            const packages = [
+              ...(installed
+                ? [
+                    { from: "zh", to: "en", version: "1.9" },
+                    { from: "en", to: "zh", version: "1.9" },
+                  ]
+                : []),
+              ...(japanese
+                ? [
+                    { from: "ja", to: "zh", version: "m2m100" },
+                    { from: "zh", to: "ja", version: "m2m100" },
+                  ]
+                : []),
+            ];
+            const codes = [...new Set(packages.flatMap((p) => [p.from, p.to]))];
             return {
               data: {
-                languages: installed
-                  ? [
-                      { code: "zh", name: "Chinese", targets: ["en"] },
-                      { code: "en", name: "English", targets: ["zh"] },
-                    ]
-                  : [],
-                packages: installed
-                  ? [
-                      { from: "zh", to: "en", version: "1.9" },
-                      { from: "en", to: "zh", version: "1.9" },
-                    ]
-                  : [],
+                languages: codes.map((code) => ({
+                  code,
+                  name: code,
+                  targets: packages
+                    .filter((p) => p.from === code)
+                    .map((p) => p.to),
+                })),
+                packages,
               },
               elapsed: 0,
             };
+          }
           if (command === "runtime_location") return "C:\\LocalTranslator";
           if (command === "model_catalog")
             return [
@@ -52,15 +65,43 @@ async function setup(page: Page, installed = true) {
                 present: installed,
                 installed,
               },
+              {
+                id: "ja-zh",
+                source: "ja",
+                target: "zh",
+                version: "m2m100",
+                name: "M2M100 INT8",
+                bidirectional: true,
+                bytes: 500000000,
+                present: japanese,
+                installed: japanese,
+              },
             ];
           if (command === "translate_text")
             return {
               data: {
-                text: args.source === "zh" ? "Hello, world!" : "哈罗,世界!",
+                text:
+                  args.target === "ja"
+                    ? "こんにちは。"
+                    : args.source === "ja"
+                      ? "我一直喜欢你。"
+                      : args.source === "zh"
+                        ? "Hello, world!"
+                        : "哈罗,世界!",
               },
               elapsed: 0.4,
             };
-          if (command === "install_model") throw "下载中断，请检查网络后重试。";
+          if (command === "install_model") {
+            if (args.id === "ja-zh") {
+              japanese = true;
+              return null;
+            }
+            throw "下载中断，请检查网络后重试。";
+          }
+          if (command === "remove_model" && args.id === "ja-zh") {
+            japanese = false;
+            return null;
+          }
           if (command === "model_progress") return { active: false };
           return null;
         },
@@ -140,7 +181,7 @@ test("English model screen, confirmation and native errors are localized", async
   await page.locator("#locale-toggle").click();
   await page.locator('[data-view="models"]').click();
   await expect(page.locator("#heading")).toHaveText("Models");
-  await expect(page.locator("#model-count")).toHaveText("2 / 2 installed");
+  await expect(page.locator("#model-count")).toHaveText("2 / 3 installed");
   await page
     .getByRole("button", {
       name: "Delete English → Chinese (Simplified) model",
@@ -160,7 +201,7 @@ test("English model screen, confirmation and native errors are localized", async
     ),
   ).toBe(false);
   await page.locator("#locale-toggle").click();
-  await expect(page.locator("#model-count")).toHaveText("2 / 2 已安装");
+  await expect(page.locator("#model-count")).toHaveText("2 / 3 已安装");
 });
 
 test("missing-model state retains requested direction and download errors use English", async ({
@@ -214,6 +255,56 @@ test("an unavailable interface direction can be swapped back to an installed mod
   await expect(page.locator("#target")).toHaveValue("en");
   await expect(page.locator("#message")).toBeHidden();
   await expect(page.locator("#translate")).toBeEnabled();
+});
+
+test("one shared Japanese model enables both directions and is removed once", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.locator("#source").selectOption("ja");
+  await expect(page.locator("#target")).toHaveValue("zh");
+  await expect(page.locator("#translate")).toBeDisabled();
+  await page.locator('[data-view="models"]').click();
+  await page
+    .getByRole("button", { name: "下载日语 ↔ 简体中文模型", exact: true })
+    .click();
+  await expect(page.locator("#model-count")).toHaveText("3 / 3 已安装");
+  await page.locator('[data-view="text"]').click();
+  await page.locator("#input").fill("お前のこと、ずっと好きだった。");
+  await page.locator("#translate").click();
+  await expect(page.locator("#output")).toHaveValue("我一直喜欢你。");
+  await page.locator("#swap").click();
+  await expect(page.locator("#source")).toHaveValue("zh");
+  await expect(page.locator("#target")).toHaveValue("ja");
+  await page.locator("#input").fill("你好。");
+  await page.locator("#translate").click();
+  await expect(page.locator("#output")).toHaveValue("こんにちは。");
+  await page.locator('[data-view="models"]').click();
+  await page
+    .getByRole("button", { name: "删除日语 ↔ 简体中文模型", exact: true })
+    .click();
+  await page.locator("#confirm-delete").click();
+  await expect(page.locator("#model-count")).toHaveText("2 / 3 已安装");
+  const calls = await page.evaluate(() => (window as any).testCalls);
+  expect(
+    calls.filter(
+      (c: any) => c.command === "install_model" && c.args.id === "ja-zh",
+    ),
+  ).toHaveLength(1);
+  expect(
+    calls.filter(
+      (c: any) => c.command === "remove_model" && c.args.id === "ja-zh",
+    ),
+  ).toHaveLength(1);
+  expect(
+    calls
+      .filter((c: any) => c.command === "translate_text")
+      .map((c: any) => [c.args.source, c.args.target]),
+  ).toEqual([
+    ["ja", "zh"],
+    ["zh", "ja"],
+  ]);
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
 });
 
 test("editors fill the window and context menus remain limited to text", async ({

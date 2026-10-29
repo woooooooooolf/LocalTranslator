@@ -20,6 +20,8 @@ LocalTranslator 1.0.0 提供原生 CPU 文字翻译与模型管理。Python、To
 
 ## 外置模型
 
+主分支新增日语↔中文的 M2M100 418M INT8 数据包，原模型为 Meta 的 `facebook/m2m100_418M`，许可 MIT；采用 `auralmira/m2m100-418M-ct2-int8` 社区转换的固定提交 `e205afefce2fd6933a1dca3b92b5063894f2f2bb`。这不是 Meta 官方 CTranslate2 转换发布。程序按内置 SHA-256 获取模型数据，安装包中保留来源和 Meta 的 MIT 许可原文，另见 `third_party/m2m100/LICENSE.txt`。来源：https://huggingface.co/facebook/m2m100_418M 、https://huggingface.co/auralmira/m2m100-418M-ct2-int8 。选型与实测见 `docs/JAPANESE_MODEL_EVALUATION.md`。
+
 保留模型原 README，位置为 `models/packages/translate-en_zh-1_9/README.md` 和 `models/packages/translate-zh_en-1_9/README.md`。
 
 这两份 README 声明，原始 OPUS 模型许可为 CC BY 4.0，作者为 Jörg Tiedemann 与 Santhosh Thottingal，出处为 OPUS-MT — Building open translation services for the World，EAMT 2020，Lisbon, Portugal。本工程未修改翻译权重。https://creativecommons.org/licenses/by/4.0/

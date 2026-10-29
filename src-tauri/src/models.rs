@@ -32,6 +32,24 @@ pub struct ModelFile {
     pub size: u64,
     pub sha256: String,
 }
+#[derive(Clone, Copy, Default, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PackageKind {
+    #[default]
+    Argos,
+    M2m100,
+}
+#[derive(Clone, Deserialize, Serialize)]
+pub struct RemoteFile {
+    pub path: String,
+    #[serde(flatten)]
+    pub asset: Asset,
+}
+#[derive(Clone, Deserialize, Serialize)]
+pub struct EmbeddedFile {
+    pub path: String,
+    pub content: String,
+}
 #[derive(Clone, Deserialize, Serialize)]
 pub struct Model {
     pub id: String,
@@ -39,9 +57,32 @@ pub struct Model {
     pub target: String,
     pub version: String,
     pub folder: String,
+    // An Argos archive, or the primary raw weight file of a direct-file bundle.
     pub archive: Asset,
     pub segmentation: Segmentation,
     pub files: Vec<ModelFile>,
+    #[serde(default)]
+    pub kind: PackageKind,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub bidirectional: bool,
+    #[serde(default)]
+    pub downloads: Vec<RemoteFile>,
+    #[serde(default)]
+    pub embedded_files: Vec<EmbeddedFile>,
+    #[serde(default)]
+    pub additional_segmentation: Vec<Segmentation>,
+}
+impl Model {
+    fn segmentations(&self) -> impl Iterator<Item = &Segmentation> {
+        std::iter::once(&self.segmentation).chain(self.additional_segmentation.iter())
+    }
+    fn download_size(&self) -> u64 {
+        self.archive.size
+            + self.downloads.iter().map(|f| f.asset.size).sum::<u64>()
+            + self.segmentations().map(|s| s.asset.size).sum::<u64>()
+    }
 }
 pub fn catalog() -> Vec<Model> {
     serde_json::from_str(include_str!("../model-catalog.json"))
@@ -98,14 +139,14 @@ impl ModelManager {
         self.cancel.store(false, Ordering::Relaxed);
         *progress = Progress {
             active: true,
-            id: model.id,
+            id: model.id.clone(),
             phase: if downloading {
                 "准备下载"
             } else {
                 "删除中"
             }
             .into(),
-            total: model.archive.size + model.segmentation.asset.size,
+            total: model.download_size(),
             cancellable: downloading,
             received: 0,
         };
@@ -180,6 +221,7 @@ impl ModelManager {
     }
     /// The operation guard and OS lock must live until commit completes.
     pub async fn prepare(&self, root: &Path, model: &Model) -> Result<tempfile::TempDir, String> {
+        validate_plan(model)?;
         cleanup_staging(root)?;
         let stage = tempfile::Builder::new()
             .prefix("stage-")
@@ -190,21 +232,50 @@ impl ModelManager {
         self.phase("下载翻译模型");
         self.download(&client, &model.archive, &stage.path().join("package.part"))
             .await?;
+        if model.kind == PackageKind::M2m100 {
+            fs::create_dir_all(stage.path().join("package/model"))
+                .map_err(|_| "无法创建模型目录。")?;
+            fs::rename(
+                stage.path().join("package.part"),
+                stage.path().join("package/model/model.bin"),
+            )
+            .map_err(|_| "无法准备模型。")?;
+            for download in &model.downloads {
+                self.check_cancel()?;
+                let destination = stage.path().join("package").join(&download.path);
+                fs::create_dir_all(destination.parent().unwrap())
+                    .map_err(|_| "无法创建模型目录。")?;
+                self.download(&client, &download.asset, &destination)
+                    .await?;
+            }
+            for embedded in &model.embedded_files {
+                fs::write(
+                    stage.path().join("package").join(&embedded.path),
+                    embedded.content.as_bytes(),
+                )
+                .map_err(|_| "模型写入失败。")?;
+            }
+        }
         self.phase("下载分句模型");
-        self.download(
-            &client,
-            &model.segmentation.asset,
-            &stage.path().join("sbd.part"),
-        )
-        .await?;
+        for (index, segmentation) in model.segmentations().enumerate() {
+            self.download(
+                &client,
+                &segmentation.asset,
+                &stage.path().join(format!("sbd-{index}.part")),
+            )
+            .await?;
+        }
         self.phase("校验与解包");
         self.check_cancel()?;
-        extract(
-            model,
-            &stage.path().join("package.part"),
-            &stage.path().join("package"),
-            &self.cancel,
-        )?;
+        if model.kind == PackageKind::Argos {
+            extract(
+                model,
+                &stage.path().join("package.part"),
+                &stage.path().join("package"),
+                &self.cancel,
+            )?;
+        }
+        verify_package(model, &stage.path().join("package"), &self.cancel)?;
         self.check_cancel()?;
         Ok(stage)
     }
@@ -231,18 +302,23 @@ impl ModelManager {
             probe_root.join("packages").join(&model.folder),
         )
         .map_err(|_| "无法准备模型。")?;
-        fs::rename(
-            stage.join("sbd.part"),
-            probe_root
-                .join("minisbd")
-                .join(&model.segmentation.filename),
-        )
-        .map_err(|_| "无法准备分句模型。")?;
+        for (index, segmentation) in model.segmentations().enumerate() {
+            fs::rename(
+                stage.join(format!("sbd-{index}.part")),
+                probe_root.join("minisbd").join(&segmentation.filename),
+            )
+            .map_err(|_| "无法准备分句模型。")?;
+        }
         {
             let mut probe = jingyi_engine::Engine::new(probe_root.clone());
             probe
                 .tokenize("test", &model.source, &model.target)
                 .map_err(|_| "模型加载验证失败，未安装。")?;
+            if model.bidirectional {
+                probe
+                    .tokenize("test", &model.target, &model.source)
+                    .map_err(|_| "模型加载验证失败，未安装。")?;
+            }
         }
         plain_directory(&root.join("packages"))?;
         plain_directory(&root.join("minisbd"))?;
@@ -252,23 +328,23 @@ impl ModelManager {
             return Err("此模型目录已存在，请先删除后重新下载。".into());
         }
         engine.refresh(); // unload handles before replacing shared model data
-        let sbd = root.join("minisbd").join(&model.segmentation.filename);
-        reject_link(&sbd)?;
-        // A valid existing shared file is left untouched. A broken file is replaced
-        // with rollback on failure, before the package directory becomes visible.
-        let staged_sbd = probe_root
-            .join("minisbd")
-            .join(&model.segmentation.filename);
-        if !matches_asset(&sbd, &model.segmentation.asset) {
-            if sbd.exists() {
-                fs::rename(&sbd, stage.join("old-sbd"))
-                    .map_err(|_| "分句模型正在使用，无法替换。")?;
-            }
-            if fs::rename(&staged_sbd, &sbd).is_err() {
-                if stage.join("old-sbd").exists() {
-                    let _ = fs::rename(stage.join("old-sbd"), &sbd);
+                          // A valid existing shared file is left untouched. A broken file is replaced
+                          // with rollback on failure, before the package directory becomes visible.
+        for (index, segmentation) in model.segmentations().enumerate() {
+            let sbd = root.join("minisbd").join(&segmentation.filename);
+            reject_link(&sbd)?;
+            let staged_sbd = probe_root.join("minisbd").join(&segmentation.filename);
+            let backup = stage.join(format!("old-sbd-{index}"));
+            if !matches_asset(&sbd, &segmentation.asset) {
+                if sbd.exists() {
+                    fs::rename(&sbd, &backup).map_err(|_| "分句模型正在使用，无法替换。")?;
                 }
-                return Err("无法安装分句模型。".into());
+                if fs::rename(&staged_sbd, &sbd).is_err() {
+                    if backup.exists() {
+                        let _ = fs::rename(&backup, &sbd);
+                    }
+                    return Err("无法安装分句模型。".into());
+                }
             }
         }
         fs::rename(probe_root.join("packages").join(&model.folder), destination)
@@ -306,7 +382,7 @@ impl ModelManager {
             .map_err(|_| "模型正在使用或目录不可写，删除失败。")?;
         bump_revision(root)?;
         engine.refresh();
-        // Keep shared MiniSBD data (under 1 MB) for manual packages/other directions.
+        // Keep shared MiniSBD data for manual packages and other directions.
         trash
             .close()
             .map_err(|_| "模型已停用，残留文件将在下次模型操作时清理。".to_owned())
@@ -320,7 +396,7 @@ fn client() -> Result<reqwest::Client, String> {
         .user_agent(concat!("Jingyi/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(15))
         .read_timeout(Duration::from_secs(30))
-        .timeout(Duration::from_secs(1200))
+        .timeout(Duration::from_secs(7200))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if attempt.previous().len() >= 5 || !allowed_url(attempt.url()) {
                 attempt.error("untrusted model redirect")
@@ -343,6 +419,13 @@ fn allowed_url(url: &reqwest::Url) -> bool {
                     | "github.com"
                     | "release-assets.githubusercontent.com"
                     | "objects.githubusercontent.com"
+                    | "huggingface.co"
+                    | "cas-bridge.xethub.hf.co"
+                    | "cdn-lfs.huggingface.co"
+                    | "cdn-lfs.hf.co"
+                    | "cdn-lfs-us-1.hf.co"
+                    | "us.aws.cdn.hf.co"
+                    | "eu.aws.cdn.hf.co"
             )
         )
 }
@@ -357,6 +440,131 @@ fn matches_asset(path: &Path, asset: &Asset) -> bool {
         Ok(format!("{:x}", digest.finalize()) == asset.sha256)
     })()
     .unwrap_or(false)
+}
+fn validate_plan(model: &Model) -> Result<(), String> {
+    let required = [
+        "metadata.json",
+        "README.md",
+        "sentencepiece.model",
+        "model/config.json",
+        "model/model.bin",
+        "model/shared_vocabulary.json",
+    ];
+    let names: HashSet<_> = model.files.iter().map(|file| file.path.as_str()).collect();
+    if names.len() != required.len()
+        || model.files.len() != required.len()
+        || required.iter().any(|name| !names.contains(name))
+        || !safe_archive_name(&model.folder)
+        || model.folder.contains('/')
+    {
+        return Err("模型清单无效。".into());
+    }
+    let assets = std::iter::once(&model.archive)
+        .chain(model.downloads.iter().map(|file| &file.asset))
+        .chain(model.segmentations().map(|s| &s.asset));
+    for asset in assets {
+        if asset.size == 0
+            || asset.size > 2 * 1024 * 1024 * 1024
+            || asset.sha256.len() != 64
+            || !asset.sha256.bytes().all(|c| c.is_ascii_hexdigit())
+            || !asset
+                .url
+                .parse::<reqwest::Url>()
+                .is_ok_and(|url| allowed_url(&url))
+        {
+            return Err("模型清单无效。".into());
+        }
+    }
+    for segmentation in model.segmentations() {
+        if !safe_archive_name(&segmentation.filename) || segmentation.filename.contains('/') {
+            return Err("模型清单无效。".into());
+        }
+    }
+    if model.kind == PackageKind::M2m100 {
+        let mut planned = HashSet::from(["model/model.bin"]);
+        for remote in &model.downloads {
+            if !names.contains(remote.path.as_str()) || !planned.insert(remote.path.as_str()) {
+                return Err("模型清单无效。".into());
+            }
+            let expected = model
+                .files
+                .iter()
+                .find(|file| file.path == remote.path)
+                .unwrap();
+            if expected.size != remote.asset.size || expected.sha256 != remote.asset.sha256 {
+                return Err("模型清单无效。".into());
+            }
+        }
+        for embedded in &model.embedded_files {
+            if !names.contains(embedded.path.as_str()) || !planned.insert(embedded.path.as_str()) {
+                return Err("模型清单无效。".into());
+            }
+            let expected = model
+                .files
+                .iter()
+                .find(|file| file.path == embedded.path)
+                .unwrap();
+            if expected.size != embedded.content.len() as u64
+                || expected.sha256 != format!("{:x}", Sha256::digest(embedded.content.as_bytes()))
+            {
+                return Err("模型清单无效。".into());
+            }
+        }
+        let weight = model
+            .files
+            .iter()
+            .find(|file| file.path == "model/model.bin")
+            .unwrap();
+        if planned != names
+            || weight.size != model.archive.size
+            || weight.sha256 != model.archive.sha256
+            || !model.bidirectional
+        {
+            return Err("模型清单无效。".into());
+        }
+    }
+    Ok(())
+}
+
+fn verify_package(model: &Model, directory: &Path, cancel: &AtomicBool) -> Result<(), String> {
+    for expected in &model.files {
+        let path = directory.join(&expected.path);
+        reject_link(&path)?;
+        let mut file = File::open(&path).map_err(|_| "模型包缺少必要文件。")?;
+        if file.metadata().map_err(|_| "无法读取模型包。")?.len() != expected.size {
+            return Err("模型内容校验失败，未安装。".into());
+        }
+        let mut digest = Sha256::new();
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            if cancel.load(Ordering::Relaxed) {
+                return Err("下载已取消。".into());
+            }
+            let size = file.read(&mut buffer).map_err(|_| "无法读取模型包。")?;
+            if size == 0 {
+                break;
+            }
+            digest.update(&buffer[..size]);
+        }
+        if format!("{:x}", digest.finalize()) != expected.sha256 {
+            return Err("模型内容校验失败，未安装。".into());
+        }
+    }
+    let metadata: serde_json::Value = serde_json::from_slice(
+        &fs::read(directory.join("metadata.json")).map_err(|_| "缺少模型信息。")?,
+    )
+    .map_err(|_| "模型信息无效。")?;
+    if metadata["from_code"] != model.source
+        || metadata["to_code"] != model.target
+        || metadata["package_version"] != model.version
+        || (model.kind == PackageKind::M2m100
+            && (metadata["model_type"] != "m2m100"
+                || metadata["bidirectional"] != true
+                || metadata["target_prefix"] != format!("__{}__", model.target)))
+    {
+        return Err("模型语言或版本不匹配。".into());
+    }
+    Ok(())
 }
 fn safe_archive_name(name: &str) -> bool {
     !name.is_empty()
@@ -492,9 +700,9 @@ pub fn list(root: &Path) -> serde_json::Value {
         let folder = root.join("packages").join(&model.folder);
         let present = fs::symlink_metadata(&folder).is_ok();
         let installed = model.files.iter().all(|f| folder.join(&f.path).metadata().is_ok_and(|m| m.is_file() && m.len() == f.size))
-            && root.join("minisbd").join(&model.segmentation.filename).metadata().is_ok_and(|m| m.len() == model.segmentation.asset.size);
+            && model.segmentations().all(|s| root.join("minisbd").join(&s.filename).metadata().is_ok_and(|m| m.len() == s.asset.size));
         serde_json::json!({"id":model.id,"source":model.source,"target":model.target,"version":model.version,
-            "bytes":model.archive.size + model.segmentation.asset.size,"present":present,"installed":installed})
+            "bytes":model.download_size(),"present":present,"installed":installed,"bidirectional":model.bidirectional,"name":model.name})
     }).collect();
     serde_json::json!(models)
 }
@@ -504,9 +712,10 @@ mod tests {
     use super::*;
     #[test]
     fn catalog_and_network_boundary() {
-        assert_eq!(catalog().len(), 2);
+        assert_eq!(catalog().len(), 3);
         assert!(find("../../outside").is_err());
         for model in catalog() {
+            validate_plan(&model).unwrap();
             assert!(allowed_url(&model.archive.url.parse().unwrap()));
             assert!(allowed_url(&model.segmentation.asset.url.parse().unwrap()));
             assert_eq!(model.archive.sha256.len(), 64);
@@ -532,6 +741,25 @@ mod tests {
             "a /b",
         ] {
             assert!(!safe_archive_name(path), "{path}");
+        }
+    }
+
+    #[test]
+    fn model_plans_reject_unsafe_paths_and_untrusted_sources() {
+        for mut model in catalog() {
+            model.folder = "../outside".into();
+            assert!(validate_plan(&model).is_err());
+        }
+        for mut model in catalog() {
+            model.archive.url = "https://example.com/model".into();
+            assert!(validate_plan(&model).is_err());
+        }
+        if let Some(mut model) = catalog()
+            .into_iter()
+            .find(|m| m.kind == PackageKind::M2m100)
+        {
+            model.downloads[0].path = "../outside".into();
+            assert!(validate_plan(&model).is_err());
         }
     }
     #[test]
@@ -703,6 +931,96 @@ mod tests {
     async fn cached_install_translate_remove() {
         lifecycle(false).await;
     }
+    fn cached_stage(
+        root: &Path,
+        model: &Model,
+        manager: &ModelManager,
+        cache: &Path,
+    ) -> tempfile::TempDir {
+        cleanup_staging(root).unwrap();
+        let stage = tempfile::Builder::new()
+            .prefix("stage-")
+            .tempdir_in(root.join(".manager"))
+            .unwrap();
+        fs::write(stage.path().join(".jingyi-stage"), []).unwrap();
+        if model.kind == PackageKind::M2m100 {
+            fs::create_dir_all(stage.path().join("package/model")).unwrap();
+            let source = cache.join(&model.folder).join("model/model.bin");
+            assert!(matches_asset(&source, &model.archive));
+            fs::copy(source, stage.path().join("package/model/model.bin")).unwrap();
+            for file in &model.downloads {
+                let source = cache.join(&model.folder).join(&file.path);
+                assert!(matches_asset(&source, &file.asset));
+                fs::copy(source, stage.path().join("package").join(&file.path)).unwrap();
+            }
+            for file in &model.embedded_files {
+                fs::write(
+                    stage.path().join("package").join(&file.path),
+                    file.content.as_bytes(),
+                )
+                .unwrap();
+            }
+        } else {
+            let archive = cache.join(model.archive.url.rsplit('/').next().unwrap());
+            assert!(matches_asset(&archive, &model.archive));
+            extract(
+                model,
+                &archive,
+                &stage.path().join("package"),
+                &manager.cancel,
+            )
+            .unwrap();
+        }
+        for (index, segmentation) in model.segmentations().enumerate() {
+            let source = cache.join(&segmentation.filename);
+            assert!(matches_asset(&source, &segmentation.asset));
+            fs::copy(source, stage.path().join(format!("sbd-{index}.part"))).unwrap();
+        }
+        verify_package(model, &stage.path().join("package"), &manager.cancel).unwrap();
+        stage
+    }
+
+    #[tokio::test]
+    #[ignore = "Checks pinned model HTTPS routes with bounded range requests"]
+    async fn japanese_https_prefix_matches_verified_cache() {
+        let model = catalog()
+            .into_iter()
+            .find(|m| m.kind == PackageKind::M2m100)
+            .expect("Missing Japanese bundle");
+        let cache = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join(".cache/model-downloads")
+            .join(&model.folder);
+        let client = client().unwrap();
+        for (asset, path) in std::iter::once((&model.archive, cache.join("model/model.bin"))).chain(
+            model
+                .downloads
+                .iter()
+                .map(|f| (&f.asset, cache.join(&f.path))),
+        ) {
+            let count = asset.size.min(65536) as usize;
+            let mut expected = vec![0; count];
+            File::open(path).unwrap().read_exact(&mut expected).unwrap();
+            let mut response = client
+                .get(&asset.url)
+                .header(reqwest::header::RANGE, format!("bytes=0-{}", count - 1))
+                .send()
+                .await
+                .unwrap();
+            assert!(response.status().is_success(), "HTTP {}", response.status());
+            let mut actual = Vec::new();
+            while actual.len() < count {
+                let bytes = response
+                    .chunk()
+                    .await
+                    .unwrap()
+                    .expect("Truncated HTTP prefix");
+                actual.extend_from_slice(&bytes[..bytes.len().min(count - actual.len())]);
+            }
+            assert_eq!(actual, expected);
+        }
+    }
     async fn lifecycle(network: bool) {
         let parent = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -727,26 +1045,8 @@ mod tests {
             let stage = if network {
                 manager.prepare(&root, &model).await.unwrap()
             } else {
-                cleanup_staging(&root).unwrap();
-                let stage = tempfile::Builder::new()
-                    .prefix("stage-")
-                    .tempdir_in(root.join(".manager"))
-                    .unwrap();
-                fs::write(stage.path().join(".jingyi-stage"), []).unwrap();
                 let cache = parent.join("model-downloads");
-                let archive = cache.join(model.archive.url.rsplit('/').next().unwrap());
-                assert!(matches_asset(&archive, &model.archive));
-                extract(
-                    &model,
-                    &archive,
-                    &stage.path().join("package"),
-                    &manager.cancel,
-                )
-                .unwrap();
-                let sbd = cache.join(&model.segmentation.filename);
-                assert!(matches_asset(&sbd, &model.segmentation.asset));
-                fs::copy(sbd, stage.path().join("sbd.part")).unwrap();
-                stage
+                cached_stage(&root, &model, &manager, &cache)
             };
             manager
                 .install(&root, &model, stage.path(), &mut engine)
@@ -754,14 +1054,24 @@ mod tests {
             drop(stage);
             drop(lock);
             drop(operation);
-            let sample = if model.source == "en" {
-                "Hello, world!"
-            } else {
-                "你好，世界！"
+            let sample = match model.source.as_str() {
+                "en" => "Hello, world!",
+                "ja" => "こんにちは。",
+                _ => "你好，世界！",
             };
             let result = engine.request(&serde_json::json!({"op":"text","text":sample,"source":model.source,"target":model.target})).unwrap();
             assert!(!result["text"].as_str().unwrap().trim().is_empty());
             eprintln!("{} translated: {}", model.id, result["text"]);
+            if model.bidirectional {
+                let reverse = engine.request(&serde_json::json!({"op":"text","text":"你好，世界！","source":model.target,"target":model.source})).unwrap();
+                let value = reverse["text"].as_str().unwrap();
+                assert!(
+                    !value.trim().is_empty()
+                        && !value.contains("__ja__")
+                        && !value.contains("__zh__")
+                );
+                eprintln!("{} reverse translated: {}", model.id, value);
+            }
         }
         assert!(list(&root)
             .as_array()

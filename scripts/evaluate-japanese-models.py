@@ -159,23 +159,31 @@ def benchmark(candidate):
     print(json.dumps({k:v for k,v in report.items() if k!='samples'},ensure_ascii=False),flush=True)
 
 
-def native_benchmark(candidate):
+def native_benchmark(candidate, desktop_exe=None):
     import sentencepiece as spm
     from minisbd import SBDetect
-    model_root=CACHE/f'native-{candidate}'
-    package=model_root/'packages/m2m100-ja-zh'
-    (package/'model').mkdir(parents=True,exist_ok=True)
-    (model_root/'minisbd').mkdir(exist_ok=True)
-    for name in ['model.bin','config.json','shared_vocabulary.json']:
-        shutil.copyfile(CACHE/candidate/name,package/'model'/name)
-    shutil.copyfile(CACHE/candidate/'sentencepiece.bpe.model',package/'sentencepiece.model')
-    shutil.copyfile(CACHE/candidate/'README.md',package/'README.md')
-    (package/'metadata.json').write_text(json.dumps({'from_code':'ja','to_code':'zh','from_name':'Japanese','to_name':'Chinese',
-        'package_version':'1.0','model_type':'m2m100','bidirectional':True,'target_prefix':'__zh__'}),encoding='utf-8')
-    shutil.copyfile(CACHE/'ja.onnx',model_root/'minisbd/ja.onnx')
-    shutil.copyfile(ROOT/'models/minisbd/zh-hans.onnx',model_root/'minisbd/zh-hans.onnx')
-    exe=ROOT/'crates/engine/target/release/check-engine.exe'
-    child=subprocess.Popen([str(exe),str(model_root)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
+    if desktop_exe is None:
+        model_root=CACHE/f'native-{candidate}'
+        package=model_root/'packages/m2m100-ja-zh'
+        (package/'model').mkdir(parents=True,exist_ok=True)
+        (model_root/'minisbd').mkdir(exist_ok=True)
+        for name in ['model.bin','config.json','shared_vocabulary.json']:
+            shutil.copyfile(CACHE/candidate/name,package/'model'/name)
+        shutil.copyfile(CACHE/candidate/'sentencepiece.bpe.model',package/'sentencepiece.model')
+        shutil.copyfile(CACHE/candidate/'README.md',package/'README.md')
+        (package/'metadata.json').write_text(json.dumps({'from_code':'ja','to_code':'zh','from_name':'Japanese','to_name':'Chinese',
+            'package_version':'1.0','model_type':'m2m100','bidirectional':True,'target_prefix':'__zh__'}),encoding='utf-8')
+        shutil.copyfile(CACHE/'ja.onnx',model_root/'minisbd/ja.onnx')
+        shutil.copyfile(ROOT/'models/minisbd/zh-hans.onnx',model_root/'minisbd/zh-hans.onnx')
+        exe=ROOT/'crates/engine/target/release/check-engine.exe'
+        command=[str(exe),str(model_root)]
+    else:
+        exe=desktop_exe.resolve()
+        model_root=exe.parent/'models'
+        entry=next(m for m in json.loads((ROOT/'src-tauri/model-catalog.json').read_text(encoding='utf-8')) if m['id']=='ja-zh')
+        package=model_root/'packages'/entry['folder']
+        command=[str(exe),'--stdio']
+    child=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding='utf-8')
     def request(payload):
         child.stdin.write(json.dumps(payload,ensure_ascii=False)+'\n');child.stdin.flush()
         line=child.stdout.readline()
@@ -184,7 +192,7 @@ def native_benchmark(candidate):
         if not response['ok']: raise RuntimeError(response)
         return response
     try:
-        info=request({'op':'info'})['data'];assert len(info['packages'])==2,info
+        info=request({'op':'info'})['data'];assert {('ja','zh'),('zh','ja')}.issubset({(p['from'],p['to']) for p in info['packages']}),info
         tokenizer=spm.SentencePieceProcessor(model_file=str(package/'sentencepiece.model'))
         detectors={code:SBDetect(str(model_root/'minisbd'/f'{language}.onnx'),use_gpu=False) for code,language in [('ja','ja'),('zh','zh-hans')]}
         parity=0
@@ -205,7 +213,8 @@ def native_benchmark(candidate):
             print(json.dumps(records[-1],ensure_ascii=False),flush=True)
         report={'candidate':candidate,'backend':'native-Ruy','threads':4,'token_and_boundary_parity':parity,
             **memory(wintypes.HANDLE(int(child._handle))), 'p50_seconds':round(statistics.median(r['seconds'] for r in records),3),'samples':records}
-        (CACHE/f'{candidate}-native-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        suffix='desktop-native' if desktop_exe is not None else 'native'
+        (CACHE/f'{candidate}-{suffix}-report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         print(json.dumps({k:v for k,v in report.items() if k!='samples'},ensure_ascii=False),flush=True)
     finally:
         child.stdin.close();child.wait(timeout=30)
@@ -214,8 +223,8 @@ def native_benchmark(candidate):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['download','benchmark','native']);parser.add_argument('--candidate',choices=['m2m100','m2m100-1.2b','argos-pivot']);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['download','benchmark','native']);parser.add_argument('--candidate',choices=['m2m100','m2m100-1.2b','argos-pivot']);parser.add_argument('--exe',type=Path,help='Check a staged desktop EXE instead of the engine harness');args=parser.parse_args()
     if args.action=='download': download(args.candidate or 'm2m100')
-    elif args.action=='native': native_benchmark(args.candidate or 'm2m100')
+    elif args.action=='native': native_benchmark(args.candidate or 'm2m100',args.exe)
     elif args.candidate: benchmark(args.candidate)
     else: parser.error('--candidate is required for benchmarking')

@@ -6,7 +6,7 @@
 
 *Interface preview with synthetic sample text, rendered from the same frontend as the desktop app.*
 
-Translate Chinese and English text locally on your CPU. The interface and inference engines are compiled into one EXE. Download models in the app, then translate offline.
+Translate Chinese ↔ English and Japanese ↔ Chinese text locally on your CPU. The interface and inference engines are compiled into one EXE. Download models in the app, then translate offline. Japanese support is currently on main and has not been released.
 
 - **Privacy first:** Input and output are processed in local memory, without sending text to a translation service or saving drafts, history or content logs. Translation works offline after model installation.
 - **No application-level content restrictions:** The app adds no content moderation, keyword blocking or topic-based refusal rules. The 20,000-character per-request limit still applies.
@@ -18,7 +18,7 @@ Download `LocalTranslator_V1.0.0_Windows_x64.exe` from [Releases](https://github
 
 Supported: **Windows 11 x64 / Windows 10 2004+ x64**, with [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) installed. This release supports Windows only. Linux build/linking and privacy behavior need separate porting and validation; macOS is not offered.
 
-On first launch, open **Models** and download English → Chinese or Chinese → English. Only an explicit download action contacts the official model sources. There are no background downloads or model updates. Once installed, translation works without an internet connection. Models can be deleted and downloaded again.
+On first launch, open **Models** and download English → Chinese, Chinese → English or the shared Japanese ↔ Chinese model. Only explicit downloads contact the pinned sources. There are no background downloads or model updates. Once installed, translation works offline. Models can be deleted and downloaded again.
 
 ```text
 LocalTranslator_V1.0.0_Windows_x64.exe
@@ -27,14 +27,15 @@ models/
   minisbd/     # Sentence-boundary models
 ```
 
-Distribute the EXE alone, or include prepared `models/packages` and `models/minisbd` for offline machines. Do not distribute the temporary `.manager` or running `data` directories. Deleting a translation model retains less than 1 MB of shared sentence-boundary data.
+Distribute the EXE alone, or include prepared `models/packages` and `models/minisbd` for offline machines. Do not distribute the temporary `.manager` or running `data` directories. Deleting a translation model retains small shared sentence-boundary files.
 
 ## Use
 
-The corrected direction defaults below are on the main branch and have not been released yet. The V1.0.0 executable retains its original defaults.
+The corrected direction defaults and Japanese support below are on main and have not been released. The V1.0.0 executable retains its original defaults and does not include the Japanese model entry.
 
 - Enter or paste up to 20,000 characters. Click **Translate** or press `Ctrl+Enter`. Clipboard writes require an explicit copy action.
 - The interface starts in Chinese with English → Chinese translation. Select **English** in the sidebar to use English and automatically choose Chinese → English. Switching back restores English → Chinese. Existing input and output stay unchanged. Missing directions prompt you to download the model.
+- Select Japanese manually as source or target. The shared M2M100 418M INT8 bundle is about 474.2 MiB and supports both directions with one installation. See the [model evaluation](docs/JAPANESE_MODEL_EVALUATION.md) for measured latency, memory and failure examples. Manga image recognition and OCR are not included.
 - Light/dark themes and expanding text editors are included. Interface language and manual theme choices apply only to the current session and are not stored in the browser.
 - Text translation and copy only: no document import, translation history or translation file export.
 
@@ -42,9 +43,9 @@ The corrected direction defaults below are on the main branch and have not been 
 
 Input and output remain in memory. The app does not write drafts, browser storage, content logs or translation caches. WebView2 runs in a separate temporary InPrivate session; autofill and password saving are disabled and verified through native settings. Sessions are cleaned up on exit, with abandoned sessions retried on the next launch. This is not secure erasure of Windows swap files or system crash dumps.
 
-Only model downloads use the network. The download module takes fixed model IDs, never translation text or arbitrary URLs. Official Argos / MiniSBD downloads are checked against embedded SHA-256 values, extracted with limits and validated by loading the models before installation. Interrupted or cancelled downloads do not become usable partial models. See [model deployment](docs/MODEL_DEPLOYMENT.md) for sources and pinned checksums.
+Only model downloads use the network. The module takes fixed model IDs, never translation text or arbitrary URLs. Argos / MiniSBD use official releases; M2M100 uses a documented community INT8 conversion. All assets use pinned versions, embedded SHA-256 checks and loading validation. Archives are extracted with limits, and interrupted or cancelled downloads do not become usable partial models. See [model deployment](docs/MODEL_DEPLOYMENT.md).
 
-The current models are Argos 1.9 Chinese ↔ English, with CTranslate2, SentencePiece and MiniSBD on the CPU. Results depend on model capability and input context: the absence of application-level content filters does not mean the model can correctly understand or fully translate every text. Weights match the original tool, but the native Ruy backend may produce different wording from Python/MKL. Component licenses and model attribution are available in **About** and [third-party notices](THIRD_PARTY_NOTICES.md).
+Chinese ↔ English uses Argos 1.9; Japanese ↔ Chinese uses M2M100 418M INT8. Both use native CPU inference with CTranslate2, SentencePiece and MiniSBD. No application-level content filters does not mean every text will be correctly understood: the Japanese model still makes errors in kinship terms, tone and other cases. The English/Chinese weights are unchanged, but native Ruy and Python/MKL may produce different wording. Licenses and attribution are in **About** and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Build from source
 
