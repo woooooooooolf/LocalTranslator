@@ -33,8 +33,8 @@ native=[
  ('ONNX Runtime','.cache/native-src/ort-source/LICENSE'),
  ('ONNX Runtime third-party notices','.cache/native-src/ort-source/ThirdPartyNotices.txt'),
  ('Eigen (MPL2-only build)','.cache/native-src/eigen/COPYING.MPL2'),
- ('MiniSBD preprocessing attribution','runtime/py/Lib/site-packages/minisbd/modules/LICENSE.txt'),
- ('MiniSBD preprocessing credits','runtime/py/Lib/site-packages/minisbd/modules/CREDITS.txt'),
+ ('MiniSBD preprocessing attribution','third_party/minisbd/LICENSE.txt'),
+ ('MiniSBD preprocessing credits','third_party/minisbd/CREDITS.txt'),
  ('Lucide','node_modules/lucide/LICENSE'),
 ]
 for name,relative in native:

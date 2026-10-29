@@ -3,6 +3,7 @@
 No runtime dependency. Re-run deliberately when updating pinned model versions.
 """
 from concurrent.futures import ThreadPoolExecutor
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -40,18 +41,28 @@ def model(pair):
         for relative in FILES:
             data = package.read(folder + '/' + relative)
             existing = ROOT / 'models/packages' / folder / relative
-            assert data == existing.read_bytes(), ('Different existing weight', relative)
+            if existing.exists():
+                assert data == existing.read_bytes(), ('Different existing weight', relative)
             selected.append({'path': relative, 'size': len(data),
                              'sha256': hashlib.sha256(data).hexdigest()})
-    assert (CACHE / (language + '.onnx')).read_bytes() == (ROOT / 'models/minisbd' / (language + '.onnx')).read_bytes()
+    existing_sbd = ROOT / 'models/minisbd' / (language + '.onnx')
+    if existing_sbd.exists():
+        assert (CACHE / (language + '.onnx')).read_bytes() == existing_sbd.read_bytes()
     return {'id': f'{source}-{target}', 'source': source, 'target': target,
             'version': '1.9', 'folder': folder, 'archive': archive,
             'segmentation': {'filename': language + '.onnx', **sbd}, 'files': selected}
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--verify', action='store_true', help='Verify committed catalog; never update it')
+    args = parser.parse_args()
     with ThreadPoolExecutor(max_workers=2) as pool:
         catalog = list(pool.map(model, [('en', 'zh', 'en'), ('zh', 'en', 'zh-hans')]))
     output = ROOT / 'src-tauri/model-catalog.json'
-    output.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
-    print(json.dumps(catalog, ensure_ascii=False, indent=2))
+    if args.verify:
+        assert catalog == json.loads(output.read_text(encoding='utf-8')), 'Official assets differ from pinned catalog'
+        print('PASS: official archive and model file hashes match the committed catalog')
+    else:
+        output.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
+        print(json.dumps(catalog, ensure_ascii=False, indent=2))

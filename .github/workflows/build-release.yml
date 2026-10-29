@@ -1,0 +1,142 @@
+name: Windows build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['V*']
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Check version and tag
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -cne "V$version") { throw 'Tag/package version mismatch' }
+          if ((Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version -ne $version) { throw 'Tauri version mismatch' }
+          "APP_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Install frontend and Rust tools
+        shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE) { throw 'npm ci failed' }
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt
+          if ($LASTEXITCODE) { throw 'Rust install failed' }
+          rustup override set 1.99.0
+      - name: Native CPU cache
+        id: native
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            .cache/native/build/lib
+            .cache/onnx/lib
+            .cache/native-src
+          key: windows-2022-native-v1-${{ hashFiles('native/**', 'scripts/build-native.ps1', 'scripts/build-onnx.ps1', 'scripts/msvc-env.ps1') }}
+      - name: Build static CPU libraries
+        if: steps.native.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          ./scripts/build-native.ps1 -Jobs 3
+          ./scripts/build-onnx.ps1 -Jobs 3
+      - uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            crates/engine -> target
+      - name: Model fixture cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/model-downloads
+          key: model-fixtures-${{ hashFiles('src-tauri/model-catalog.json') }}
+      - name: Test UI, native privacy and real models
+        shell: pwsh
+        run: |
+          npm run build
+          if ($LASTEXITCODE) { throw 'Frontend build failed' }
+          npx playwright install chromium
+          if ($LASTEXITCODE) { throw 'Browser install failed' }
+          npm test
+          if ($LASTEXITCODE) { throw 'UI tests failed' }
+          cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+          if ($LASTEXITCODE) { throw 'App format check failed' }
+          cargo fmt --manifest-path crates/engine/Cargo.toml -- --check
+          if ($LASTEXITCODE) { throw 'Engine format check failed' }
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --bin local-translate -j 3
+          if ($LASTEXITCODE) { throw 'Native tests failed' }
+          python scripts/fetch-model-catalog.py --verify
+          if ($LASTEXITCODE) { throw 'Official model verification failed' }
+          cargo test --locked --manifest-path src-tauri/Cargo.toml --bin local-translate cached_install_translate_remove -- --ignored --nocapture
+          if ($LASTEXITCODE) { throw 'Real CPU model lifecycle test failed' }
+      - name: Build standalone executable
+        shell: pwsh
+        run: |
+          npm run portable
+          if ($LASTEXITCODE) { throw 'Release build failed' }
+          $exe = "release/LocalTranslator-V$($env:APP_VERSION)/LocalTranslator_V$($env:APP_VERSION)_Windows_x64.exe"
+          python scripts/verify-release.py $exe
+          if ($LASTEXITCODE) { throw 'Final executable check failed' }
+          . ./scripts/msvc-env.ps1
+          $imports = (& dumpbin /DEPENDENTS $exe) -join "`n"
+          if ($LASTEXITCODE -or $imports -match '(?i)(python\d*|onnxruntime|ctranslate2|vcruntime140|msvcp140|libssl|libcrypto)\.dll') { throw 'Unexpected application DLL dependency' }
+          $name = "LocalTranslator_V$($env:APP_VERSION)_Windows_x64.exe"
+          New-Item -ItemType Directory -Force release/assets | Out-Null
+          Copy-Item -LiteralPath $exe -Destination "release/assets/$name"
+          $hash = (Get-FileHash "release/assets/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content release/assets/SHA256SUMS.txt -Encoding utf8NoBOM
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-x64
+          path: release/assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/V')
+    needs: windows
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: windows-x64
+          path: release-assets
+      - name: Verify and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd release-assets
+          sha256sum --check SHA256SUMS.txt
+          cd ..
+          if [ -f "docs/releases/$RELEASE_TAG.md" ]; then
+            gh release create "$RELEASE_TAG" --verify-tag --title "LocalTranslator $RELEASE_TAG" --notes-file "docs/releases/$RELEASE_TAG.md" release-assets/*
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --title "LocalTranslator $RELEASE_TAG" --generate-notes release-assets/*
+          fi

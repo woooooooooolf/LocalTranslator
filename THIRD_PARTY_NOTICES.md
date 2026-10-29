@@ -1,8 +1,8 @@
 # 静译原生版第三方组件与模型
 
-0.4.0 提供原生 CPU 文字翻译与模型管理。Python、Torch、SpaCy、LibreTranslate、Argos Translate Files 和 PyMuPDF 不随原生便携包分发；旧版本仅保留为开发对照。
+LocalTranslator 1.0.0 提供原生 CPU 文字翻译与模型管理。Python、Torch、SpaCy、LibreTranslate、Argos Translate Files 和 PyMuPDF 不随原生便携包分发；旧版本仅保留为开发对照。
 
-应用内“关于 → 第三方说明”包含生成的许可原文与 Rust 构建依赖清单。生成器为 `scripts/generate-native-notices.py`；本工程未配置远程发布或整体开源许可。
+应用内“关于 → 第三方说明 / About → Third-party notices”包含生成的许可原文与 Rust 构建依赖清单。生成器为 `scripts/generate-native-notices.py`；模型原始 README 和署名在安装时保留。
 
 ## 主要组件
 
