@@ -73,7 +73,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     </nav>
     <div class="sidebar-bottom"><button class="nav-item" id="theme-toggle" aria-label="切换到深色主题"><i data-lucide="moon"></i><span id="theme-label">深色主题</span></button>
     <button class="nav-item" id="locale-toggle" aria-label="Switch to English"><i data-lucide="languages"></i><span>English</span></button>
-    <button class="about-button" id="about"><i data-lucide="circle-help"></i>关于<span>v1.0.0</span></button></div>
+    <button class="about-button" id="about"><i data-lucide="circle-help"></i>关于<span>v1.1.0</span></button></div>
   </aside>
   <main>
     <header class="topbar"><h1 id="heading">文字翻译</h1><div class="engine-status" id="engine-status" role="status"><span class="status-dot loading"></span><span id="engine-label">加载中</span></div></header>
@@ -88,7 +88,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       <div id="message" role="status" aria-live="polite" hidden></div>
     </div>
   </main>
-  <dialog id="about-dialog"><button class="icon-button close-dialog" id="close-about" aria-label="关闭"><i data-lucide="x"></i></button><span class="brand-icon"><i data-lucide="languages"></i></span><h2>静译 <small>1.0.0</small></h2><div class="about-details">Tauri · CTranslate2 · MiniSBD<br>CPU 本地翻译</div><div class="about-actions"><button class="secondary" id="notices">第三方说明</button><button class="secondary" id="retry">重新检查引擎</button></div></dialog>
+  <dialog id="about-dialog"><button class="icon-button close-dialog" id="close-about" aria-label="关闭"><i data-lucide="x"></i></button><span class="brand-icon"><i data-lucide="languages"></i></span><h2>静译 <small>1.1.0</small></h2><div class="about-details">Tauri · CTranslate2 · MiniSBD<br>CPU 本地翻译</div><div class="about-actions"><button class="secondary" id="notices">第三方说明</button><button class="secondary" id="retry">重新检查引擎</button></div></dialog>
   <dialog id="notices-dialog" class="notices-dialog"><button class="icon-button close-dialog" id="close-notices" aria-label="关闭第三方说明"><i data-lucide="x"></i></button><h2>第三方说明</h2><textarea id="notices-text" readonly spellcheck="false" autocomplete="off" aria-label="第三方说明内容"></textarea></dialog>
   <dialog id="delete-dialog"><h2 class="compact-heading">删除模型</h2><p id="delete-description"></p><div class="about-actions"><button class="secondary" id="cancel-delete">取消</button><button class="secondary danger" id="confirm-delete">删除</button></div></dialog>
 `;

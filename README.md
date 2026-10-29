@@ -6,7 +6,7 @@
 
 *界面预览，使用合成示例文本；由与桌面版相同的前端页面生成。*
 
-在本机 CPU 上进行中英、中日双向文字翻译。界面与推理引擎编入一个 EXE，模型可在程序内按需下载，安装后可断网使用。中日支持目前仅在主分支，尚未发版。
+在本机 CPU 上进行中英、中日双向文字翻译。界面与推理引擎编入一个 EXE，模型可在程序内按需下载，安装后可断网使用。
 
 - **隐私优先**：原文和译文在本机内存中处理，不上传到翻译服务，不保存草稿、历史或内容日志；安装模型后可断网翻译。
 - **不设题材限制**：应用不做内容审核、关键词屏蔽或按主题拒译。单次 20,000 字符的长度限制仍适用。
@@ -14,14 +14,14 @@
 
 ## 下载与运行
 
-从 [Releases](https://github.com/woooooooooolf/LocalTranslator/releases/latest) 下载 `LocalTranslator_V1.0.0_Windows_x64.exe`，放在有写入权限的文件夹后运行。无需安装 Python、Node.js、CUDA 或附带应用 DLL。
+从 [Releases](https://github.com/woooooooooolf/LocalTranslator/releases/latest) 下载 `LocalTranslator_V1.1.0_Windows_x64.exe`，放在有写入权限的文件夹后运行。无需安装 Python、Node.js、CUDA 或附带应用 DLL。
 
 支持 **Windows 11 x64 / Windows 10 2004+ x64**，需要系统已安装 [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。本版仅发布 Windows；Linux 的构建链接和隐私适配尚未验证，macOS 暂不提供。
 
 首次运行进入“本地模型”，按需下载“英语→中文”“中文→英语”或共享的“日语↔简体中文”模型。仅点击下载时访问内置清单中的固定模型源，不在后台更新或下载；下载完成后无需联网翻译。删除模型后可重新下载。
 
 ```text
-LocalTranslator_V1.0.0_Windows_x64.exe
+LocalTranslator_V1.1.0_Windows_x64.exe
 models/
   packages/    # 翻译权重、分词器、配置和模型署名
   minisbd/     # 分句模型
@@ -31,7 +31,7 @@ models/
 
 ## 使用
 
-以下方向规则与中日支持已在主分支实现，暂未发版；V1.0.0 附件保留发布时的方向规则，也不包含中日模型入口。
+V1.1.0 新增中日双向翻译，并修正默认翻译方向。旧版 V1.0.0 附件保持不变。
 
 - 输入或粘贴最多 20,000 字符，点击翻译或按 `Ctrl+Enter`；主动点击复制按钮才能写入剪贴板。
 - 默认中文界面与“英语→中文”，侧栏可切换 English。英文界面自动选择“中文→英语”，切回中文恢复“英语→中文”；切换不会改写输入或译文。对应模型缺失时会提示下载。
@@ -58,7 +58,7 @@ npm run native:onnx
 npm run portable
 ```
 
-首次静态构建耗时较长，源码版本固定在构建脚本中。输出位于 `release/LocalTranslator-V1.0.0/`，默认只含命名后的 EXE。可选 `npm run portable -- -IncludeModels` 预附当前工程中的离线模型。
+首次静态构建耗时较长，源码版本固定在构建脚本中。输出位于 `release/LocalTranslator-V1.1.0/`，默认只含命名后的 EXE。可选 `npm run portable -- -IncludeModels` 预附当前工程中的离线模型。
 
 ```powershell
 npx playwright install chromium

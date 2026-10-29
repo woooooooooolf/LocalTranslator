@@ -1,8 +1,8 @@
 # 模型下载与单 EXE 部署
 
-## 主分支中日共享模型（未发版）
+## V1.1.0 中日共享模型
 
-新增 `ja-zh` 条目，使用 `M2M100 418M INT8` 直接提供日语↔中文；一个包、一份进程内权重，两种方向。清单固定社区转换提交和每个文件的 SHA-256，来源及取舍见 [评测](JAPANESE_MODEL_EVALUATION.md)。当前 V1.0.0 附件不含此入口。
+新增 `ja-zh` 条目，使用 `M2M100 418M INT8` 直接提供日语↔中文；一个包、一份进程内权重，两种方向。清单固定社区转换提交和每个文件的 SHA-256，来源及取舍见 [评测](JAPANESE_MODEL_EVALUATION.md)。旧版 V1.0.0 附件不含此入口。
 
 - 文件来自 Hugging Face 的固定提交 `auralmira/m2m100-418M-ct2-int8@e205afefce2fd6933a1dca3b92b5063894f2f2bb`，原模型为 Meta M2M100，许可 MIT。没有将社区转换称为官方转换。
 - 主权重约 468.0 MiB，全部下载含分词/配置/日中两份分句模型共 497,202,937 字节，约 474.2 MiB。模型数据装到 `models/packages/translate-ja_zh-m2m100-418m-int8`，保留来源与完整 MIT 署名。

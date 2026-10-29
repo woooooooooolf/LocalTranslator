@@ -6,7 +6,7 @@
 
 *Interface preview with synthetic sample text, rendered from the same frontend as the desktop app.*
 
-Translate Chinese ↔ English and Japanese ↔ Chinese text locally on your CPU. The interface and inference engines are compiled into one EXE. Download models in the app, then translate offline. Japanese support is currently on main and has not been released.
+Translate Chinese ↔ English and Japanese ↔ Chinese text locally on your CPU. The interface and inference engines are compiled into one EXE. Download models in the app, then translate offline.
 
 - **Privacy first:** Input and output are processed in local memory, without sending text to a translation service or saving drafts, history or content logs. Translation works offline after model installation.
 - **No application-level content restrictions:** The app adds no content moderation, keyword blocking or topic-based refusal rules. The 20,000-character per-request limit still applies.
@@ -14,14 +14,14 @@ Translate Chinese ↔ English and Japanese ↔ Chinese text locally on your CPU.
 
 ## Download and run
 
-Download `LocalTranslator_V1.0.0_Windows_x64.exe` from [Releases](https://github.com/woooooooooolf/LocalTranslator/releases/latest). Place it in a writable folder and run it. Python, Node.js, CUDA and accompanying application DLLs are not required.
+Download `LocalTranslator_V1.1.0_Windows_x64.exe` from [Releases](https://github.com/woooooooooolf/LocalTranslator/releases/latest). Place it in a writable folder and run it. Python, Node.js, CUDA and accompanying application DLLs are not required.
 
 Supported: **Windows 11 x64 / Windows 10 2004+ x64**, with [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) installed. This release supports Windows only. Linux build/linking and privacy behavior need separate porting and validation; macOS is not offered.
 
 On first launch, open **Models** and download English → Chinese, Chinese → English or the shared Japanese ↔ Chinese model. Only explicit downloads contact the pinned sources. There are no background downloads or model updates. Once installed, translation works offline. Models can be deleted and downloaded again.
 
 ```text
-LocalTranslator_V1.0.0_Windows_x64.exe
+LocalTranslator_V1.1.0_Windows_x64.exe
 models/
   packages/    # Translation weights, tokenizer, configuration and attribution
   minisbd/     # Sentence-boundary models
@@ -31,7 +31,7 @@ Distribute the EXE alone, or include prepared `models/packages` and `models/mini
 
 ## Use
 
-The corrected direction defaults and Japanese support below are on main and have not been released. The V1.0.0 executable retains its original defaults and does not include the Japanese model entry.
+V1.1.0 adds Japanese ↔ Chinese translation and corrects the default translation directions. The original V1.0.0 assets remain unchanged.
 
 - Enter or paste up to 20,000 characters. Click **Translate** or press `Ctrl+Enter`. Clipboard writes require an explicit copy action.
 - The interface starts in Chinese with English → Chinese translation. Select **English** in the sidebar to use English and automatically choose Chinese → English. Switching back restores English → Chinese. Existing input and output stay unchanged. Missing directions prompt you to download the model.
@@ -58,7 +58,7 @@ npm run native:onnx
 npm run portable
 ```
 
-The first static-library build takes time. Upstream source revisions are pinned in the build scripts. The default output is a single named EXE in `release/LocalTranslator-V1.0.0/`. Use `npm run portable -- -IncludeModels` to optionally include models already prepared in the project.
+The first static-library build takes time. Upstream source revisions are pinned in the build scripts. The default output is a single named EXE in `release/LocalTranslator-V1.1.0/`. Use `npm run portable -- -IncludeModels` to optionally include models already prepared in the project.
 
 ```powershell
 npx playwright install chromium
